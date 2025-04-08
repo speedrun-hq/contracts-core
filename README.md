@@ -46,7 +46,7 @@ Fulfills an existing intent:
 
 ## Architecture
 
-[Learn more about the contract architecture](./architecture.md)
+[Learn more about the contract architecture](./evm/architecture.md)
 
 ## Development
 
@@ -79,7 +79,7 @@ forge test
 
 ## Deployment
 
-[Deploy the smart contracts](./deployment.md)
+[Deploy the smart contracts](./evm/deployment.md)
 
 ## Mainnet Contract
 
