@@ -55,6 +55,10 @@ contract IntentTest is Test {
         uint256 paidTip
     );
 
+    // Define events for gateway and router updates
+    event GatewayUpdated(address indexed oldGateway, address indexed newGateway);
+    event RouterUpdated(address indexed oldRouter, address indexed newRouter);
+
     function setUp() public {
         owner = address(this);
         user1 = makeAddr("user1");
@@ -1263,4 +1267,76 @@ contract IntentTest is Test {
         );
         assertEq(intent.fulfillments(fulfillmentIndex), user1);
     }
+    
+    function test_UpdateGateway() public {
+        // Deploy a new mock gateway
+        MockGateway newGateway = new MockGateway();
+        address oldGateway = intent.gateway();
+        
+        // Expect the GatewayUpdated event
+        vm.expectEmit(true, true, false, false);
+        emit GatewayUpdated(oldGateway, address(newGateway));
+        
+        // Update the gateway
+        intent.updateGateway(address(newGateway));
+        
+        // Verify the gateway was updated
+        assertEq(intent.gateway(), address(newGateway));
+    }
+    
+    function test_UpdateRouter() public {
+        // Create a new router address
+        address newRouter = makeAddr("newRouter");
+        address oldRouter = intent.router();
+        
+        // Expect the RouterUpdated event
+        vm.expectEmit(true, true, false, false);
+        emit RouterUpdated(oldRouter, newRouter);
+        
+        // Update the router
+        intent.updateRouter(newRouter);
+        
+        // Verify the router was updated
+        assertEq(intent.router(), newRouter);
+    }
+    
+    function test_UpdateGateway_ZeroAddress() public {
+        // Try to update gateway to zero address - should revert
+        vm.expectRevert("Gateway cannot be zero address");
+        intent.updateGateway(address(0));
+    }
+    
+    function test_UpdateRouter_ZeroAddress() public {
+        // Try to update router to zero address - should revert
+        vm.expectRevert("Router cannot be zero address");
+        intent.updateRouter(address(0));
+    }
+    
+    function test_UpdateGateway_NonAdmin() public {
+        // Create a non-admin account
+        address nonAdmin = makeAddr("nonAdmin");
+        
+        // Deploy a new mock gateway
+        MockGateway newGateway = new MockGateway();
+        
+        // Try to update gateway from non-admin account - should revert
+        vm.prank(nonAdmin);
+        vm.expectRevert(abi.encodeWithSignature("AccessControlUnauthorizedAccount(address,bytes32)", nonAdmin, DEFAULT_ADMIN_ROLE));
+        intent.updateGateway(address(newGateway));
+    }
+    
+    function test_UpdateRouter_NonAdmin() public {
+        // Create a non-admin account
+        address nonAdmin = makeAddr("nonAdmin");
+        
+        // Try to update router from non-admin account - should revert
+        vm.prank(nonAdmin);
+        vm.expectRevert(abi.encodeWithSignature("AccessControlUnauthorizedAccount(address,bytes32)", nonAdmin, DEFAULT_ADMIN_ROLE));
+        intent.updateRouter(makeAddr("anotherRouter"));
+    }
+
+    // TODO: Add more tests for:
+    // - complete
+    // - onCall
+    // - onRevert
 } 

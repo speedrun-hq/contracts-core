@@ -76,6 +76,12 @@ contract Intent is Initializable, UUPSUpgradeable, AccessControlUpgradeable, Pau
         uint256 paidTip
     );
 
+    // Event emitted when the gateway is updated
+    event GatewayUpdated(address indexed oldGateway, address indexed newGateway);
+
+    // Event emitted when the router is updated
+    event RouterUpdated(address indexed oldRouter, address indexed newRouter);
+
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
         _disableInitializers();
@@ -373,5 +379,27 @@ contract Intent is Initializable, UUPSUpgradeable, AccessControlUpgradeable, Pau
         );
 
         return "";
+    }
+
+    /**
+     * @dev Updates the gateway address
+     * @param _gateway New gateway address
+     */
+    function updateGateway(address _gateway) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        require(_gateway != address(0), "Gateway cannot be zero address");
+        address oldGateway = gateway;
+        gateway = _gateway;
+        emit GatewayUpdated(oldGateway, _gateway);
+    }
+
+    /**
+     * @dev Updates the router address
+     * @param _router New router address
+     */
+    function updateRouter(address _router) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        require(_router != address(0), "Router cannot be zero address");
+        address oldRouter = router;
+        router = _router;
+        emit RouterUpdated(oldRouter, _router);
     }
 } 
