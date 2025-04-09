@@ -19,6 +19,10 @@ contract IntentTest is Test {
     address public user1;
     address public user2;
     address public router;
+    
+    // Role constants
+    bytes32 public constant DEFAULT_ADMIN_ROLE = 0x00;
+    bytes32 public constant PAUSER_ROLE = keccak256("PAUSER_ROLE");
 
     // Define the event to match the one in Intent contract
     event IntentInitiated(
@@ -82,7 +86,8 @@ contract IntentTest is Test {
     }
 
     function test_Initialization() public {
-        assertEq(intent.owner(), owner);
+        assertTrue(intent.hasRole(DEFAULT_ADMIN_ROLE, owner));
+        assertTrue(intent.hasRole(PAUSER_ROLE, owner));
         assertEq(intent.gateway(), address(gateway));
         assertEq(intent.router(), router);
     }
@@ -1027,8 +1032,235 @@ contract IntentTest is Test {
         );
     }
 
-    // TODO: Add more tests for:
-    // - complete
-    // - onCall
-    // - onRevert
+    function test_PauseUnpause() public {
+        // Initially the contract is not paused
+        assertFalse(intent.paused());
+        
+        // Pause the contract
+        intent.pause();
+        
+        // Verify contract is paused
+        assertTrue(intent.paused());
+
+        // Try to initiate an intent while paused - should revert
+        uint256 amount = 100 ether;
+        uint256 tip = 10 ether;
+        uint256 targetChain = 1;
+        bytes memory receiver = abi.encodePacked(user2);
+        uint256 salt = 123;
+        
+        token.mint(user1, amount + tip);
+        vm.prank(user1);
+        token.approve(address(intent), amount + tip);
+        
+        vm.prank(user1);
+        vm.expectRevert(abi.encodeWithSignature("EnforcedPause()"));
+        intent.initiate(
+            address(token),
+            amount,
+            targetChain,
+            receiver,
+            tip,
+            salt
+        );
+        
+        // Unpause the contract
+        intent.unpause();
+        
+        // Verify contract is not paused
+        assertFalse(intent.paused());
+        
+        // Should be able to initiate now
+        vm.prank(user1);
+        bytes32 intentId = intent.initiate(
+            address(token),
+            amount,
+            targetChain,
+            receiver,
+            tip,
+            salt
+        );
+        
+        // Verify initiate worked
+        assertTrue(intentId != bytes32(0));
+    }
+    
+    function test_OnlyPauserCanPause() public {
+        // Create a non-pauser account
+        address nonPauser = makeAddr("nonPauser");
+        
+        // Try to pause from non-pauser account - should revert
+        vm.prank(nonPauser);
+        vm.expectRevert(abi.encodeWithSignature("AccessControlUnauthorizedAccount(address,bytes32)", nonPauser, PAUSER_ROLE));
+        intent.pause();
+        
+        // Give PAUSER_ROLE to nonPauser
+        vm.prank(owner);
+        intent.grantRole(PAUSER_ROLE, nonPauser);
+        
+        // Now nonPauser should be able to pause
+        vm.prank(nonPauser);
+        intent.pause();
+        
+        // Verify contract is paused
+        assertTrue(intent.paused());
+    }
+    
+    function test_OnlyAdminCanUnpause() public {
+        // First pause the contract
+        intent.pause();
+        
+        // Create a pauser account that is not an admin
+        address pauser = makeAddr("pauser");
+        vm.prank(owner);
+        intent.grantRole(PAUSER_ROLE, pauser);
+        
+        // The pauser should not be able to unpause
+        vm.prank(pauser);
+        vm.expectRevert(abi.encodeWithSignature("AccessControlUnauthorizedAccount(address,bytes32)", pauser, DEFAULT_ADMIN_ROLE));
+        intent.unpause();
+        
+        // The admin should be able to unpause
+        vm.prank(owner);
+        intent.unpause();
+        
+        // Verify contract is not paused
+        assertFalse(intent.paused());
+    }
+    
+    function test_OnCallDuringPause() public {
+        // Create an intent
+        uint256 amount = 100 ether;
+        uint256 tip = 10 ether;
+        uint256 targetChain = 1;
+        bytes memory receiver = abi.encodePacked(user2);
+        uint256 salt = 123;
+
+        // Mint tokens for initiate
+        token.mint(user1, amount + tip);
+        vm.prank(user1);
+        token.approve(address(intent), amount + tip);
+
+        vm.prank(user1);
+        bytes32 intentId = intent.initiate(
+            address(token),
+            amount,
+            targetChain,
+            receiver,
+            tip,
+            salt
+        );
+
+        // Pause the contract
+        intent.pause();
+        
+        // Verify contract is paused
+        assertTrue(intent.paused());
+
+        // Prepare settlement payload
+        bytes memory settlementPayload = PayloadUtils.encodeSettlementPayload(
+            intentId,
+            amount,
+            address(token),
+            user2,
+            tip,
+            amount  // actualAmount same as amount in the test case
+        );
+
+        // Transfer tokens to gateway for settlement
+        token.mint(address(gateway), amount + tip);
+        vm.prank(address(gateway));
+        token.approve(address(intent), amount + tip);
+
+        // onCall should work even when paused
+        vm.prank(address(gateway));
+        intent.onCall(
+            Intent.MessageContext({
+                sender: router
+            }),
+            settlementPayload
+        );
+
+        // Verify settlement record
+        bytes32 fulfillmentIndex = PayloadUtils.computeFulfillmentIndex(
+            intentId,
+            address(token),
+            amount,
+            user2
+        );
+        (bool settled, bool fulfilled, uint256 paidTip, address fulfiller) = intent.settlements(fulfillmentIndex);
+        assertTrue(settled);
+        assertFalse(fulfilled);
+        assertEq(paidTip, 0);
+        assertEq(fulfiller, address(0));
+
+        // Verify tokens were transferred to receiver (amount + tip)
+        assertEq(token.balanceOf(user2), amount + tip, "User2 should receive amount + tip");
+    }
+
+    function test_FulfillDuringPause() public {
+        // First create an intent
+        uint256 amount = 100 ether;
+        uint256 tip = 10 ether;
+        uint256 targetChain = 1;
+        bytes memory receiver = abi.encodePacked(user2);
+        uint256 salt = 123;
+
+        // Mint tokens for initiate
+        token.mint(user1, amount + tip);
+        vm.prank(user1);
+        token.approve(address(intent), amount + tip);
+
+        vm.prank(user1);
+        bytes32 intentId = intent.initiate(
+            address(token),
+            amount,
+            targetChain,
+            receiver,
+            tip,
+            salt
+        );
+
+        // Pause the contract
+        intent.pause();
+        
+        // Verify contract is paused
+        assertTrue(intent.paused());
+
+        // Mint tokens to the fulfiller (user1) and approve them for the intent contract
+        token.mint(user1, amount);
+        vm.prank(user1);
+        token.approve(address(intent), amount);
+
+        // Fulfill should revert when paused
+        vm.prank(user1);
+        vm.expectRevert(abi.encodeWithSignature("EnforcedPause()"));
+        intent.fulfill(
+            intentId,
+            address(token),
+            amount,
+            user2
+        );
+        
+        // Unpause
+        intent.unpause();
+        
+        // Fulfill should work after unpausing
+        vm.prank(user1);
+        intent.fulfill(
+            intentId,
+            address(token),
+            amount,
+            user2
+        );
+        
+        // Verify fulfillment was registered
+        bytes32 fulfillmentIndex = PayloadUtils.computeFulfillmentIndex(
+            intentId,
+            address(token),
+            amount,
+            user2
+        );
+        assertEq(intent.fulfillments(fulfillmentIndex), user1);
+    }
 } 
