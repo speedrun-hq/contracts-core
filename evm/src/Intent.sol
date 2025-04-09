@@ -3,7 +3,8 @@ pragma solidity ^0.8.26;
 
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
-import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "./interfaces/IGateway.sol";
 import "./utils/PayloadUtils.sol";
@@ -12,7 +13,10 @@ import "./utils/PayloadUtils.sol";
  * @title Intent
  * @dev Handles intent-based transfers across chains
  */
-contract Intent is Initializable, UUPSUpgradeable, OwnableUpgradeable {
+contract Intent is Initializable, UUPSUpgradeable, AccessControlUpgradeable, PausableUpgradeable {
+    // Role definitions
+    bytes32 public constant PAUSER_ROLE = keccak256("PAUSER_ROLE");
+    
     // Counter for generating unique intent IDs
     uint256 public intentCounter;
 
@@ -72,9 +76,29 @@ contract Intent is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         uint256 paidTip
     );
 
+    // Event emitted when the gateway is updated
+    event GatewayUpdated(address indexed oldGateway, address indexed newGateway);
+
+    // Event emitted when the router is updated
+    event RouterUpdated(address indexed oldRouter, address indexed newRouter);
+
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
         _disableInitializers();
+    }
+
+    /**
+     * @dev Pauses all contract functions that use the whenNotPaused modifier
+     */
+    function pause() external onlyRole(PAUSER_ROLE) {
+        _pause();
+    }
+
+    /**
+     * @dev Unpauses all contract functions
+     */
+    function unpause() external onlyRole(DEFAULT_ADMIN_ROLE) {
+        _unpause();
     }
 
     // Modifier to restrict function access to gateway only
@@ -84,14 +108,19 @@ contract Intent is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     }
 
     function initialize(address _gateway, address _router) public initializer {
-        __Ownable_init(msg.sender);
+        __AccessControl_init();
         __UUPSUpgradeable_init();
+        __Pausable_init();
+        
+        // Set up admin role
+        _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
+        _grantRole(PAUSER_ROLE, msg.sender);
         
         gateway = _gateway;
         router = _router;
     }
 
-    function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
+    function _authorizeUpgrade(address newImplementation) internal override onlyRole(DEFAULT_ADMIN_ROLE) {}
 
     /**
      * @dev Computes a unique intent ID
@@ -156,7 +185,7 @@ contract Intent is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         bytes calldata receiver,
         uint256 tip,
         uint256 salt
-    ) external returns (bytes32) {
+    ) external whenNotPaused returns (bytes32) {
         // Calculate total amount to transfer (amount + tip)
         uint256 totalAmount = amount + tip;
 
@@ -225,7 +254,7 @@ contract Intent is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         address asset,
         uint256 amount,
         address receiver
-    ) external {
+    ) external whenNotPaused {
         // Compute the fulfillment index
         bytes32 fulfillmentIndex = PayloadUtils.computeFulfillmentIndex(
             intentId,
@@ -350,5 +379,27 @@ contract Intent is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         );
 
         return "";
+    }
+
+    /**
+     * @dev Updates the gateway address
+     * @param _gateway New gateway address
+     */
+    function updateGateway(address _gateway) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        require(_gateway != address(0), "Gateway cannot be zero address");
+        address oldGateway = gateway;
+        gateway = _gateway;
+        emit GatewayUpdated(oldGateway, _gateway);
+    }
+
+    /**
+     * @dev Updates the router address
+     * @param _router New router address
+     */
+    function updateRouter(address _router) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        require(_router != address(0), "Router cannot be zero address");
+        address oldRouter = router;
+        router = _router;
+        emit RouterUpdated(oldRouter, _router);
     }
 } 

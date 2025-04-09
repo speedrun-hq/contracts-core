@@ -4,13 +4,14 @@ pragma solidity 0.8.26;
 import {Script, console2} from "forge-std/Script.sol";
 import {Intent} from "../src/Intent.sol";
 import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
+import {AccessControlUpgradeable} from "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
 
 /**
  * @title UpgradeIntentScript
  * @dev Script to upgrade an existing Intent proxy to a new implementation
  * 
  * Required environment variables:
- * - PRIVATE_KEY: Private key of the deployer (must be the owner of the proxy)
+ * - PRIVATE_KEY: Private key of the deployer (must have the DEFAULT_ADMIN_ROLE)
  * - PROXY_ADDRESS: Address of the existing Intent proxy
  * - NEW_IMPLEMENTATION: Address of the new implementation (mandatory)
  */
@@ -25,9 +26,10 @@ contract UpgradeIntentScript is Script {
         address proxyAddress = vm.envAddress("PROXY_ADDRESS");
         Intent proxy = Intent(proxyAddress);
         
-        // Check if deployer is the owner
-        if (proxy.owner() != deployer) {
-            revert("Deployer is not the owner of the proxy");
+        // Check if deployer has the DEFAULT_ADMIN_ROLE
+        bytes32 DEFAULT_ADMIN_ROLE = 0x00;
+        if (!proxy.hasRole(DEFAULT_ADMIN_ROLE, deployer)) {
+            revert("Deployer does not have the DEFAULT_ADMIN_ROLE");
         }
         
         // Get new implementation address (required)
