@@ -83,17 +83,7 @@ forge test
 
 ## Mainnet Contract
 
-ZetaChain router: `0xBE9fA6C741bc9623f67806d9120493abE6962Bb9`
-
-| Chain   | Intent Contract |
-|-----------|----------|
-| Ethereum  | `0x0ec6599Bc62Ad5FF3e72493DEc1318BbB2899D1B`        |
-| BNB Chain | `0x0ec6599Bc62Ad5FF3e72493DEc1318BbB2899D1B`       |
-| Polygon   | `0x0ec6599Bc62Ad5FF3e72493DEc1318BbB2899D1B`      |
-| Base      | `0xAd505e8d97FB872EBdF575a5FC0Dc141e5f786ad`     |
-| Avalanche | `0x0ec6599Bc62Ad5FF3e72493DEc1318BbB2899D1B`    |
-| Arbitrum  | `0x951AB2A5417a51eB5810aC44BC1fC716995C1CAB`    |
-
+TODO: deploy and verify new addresses
 
 ## License
 
