@@ -3,6 +3,7 @@ pragma solidity 0.8.26;
 
 import {Test, console2} from "forge-std/Test.sol";
 import {Router} from "../src/Router.sol";
+import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 import {MockGateway} from "./mocks/MockGateway.sol";
 import {MockToken} from "./mocks/MockToken.sol";
 import {PayloadUtils} from "../src/utils/PayloadUtils.sol";
@@ -41,6 +42,27 @@ contract RouterTest is Test {
         uint256 tip
     );
 
+    // Helper function to create a properly initialized Router
+    function createInitializedRouter(address gatewayAddr, address swapModuleAddr) internal returns (Router) {
+        // Deploy implementation
+        Router implementation = new Router();
+        
+        // Prepare initialization data
+        bytes memory initData = abi.encodeWithSelector(
+            Router.initialize.selector,
+            gatewayAddr,
+            swapModuleAddr
+        );
+        
+        // Deploy proxy
+        ERC1967Proxy proxy = new ERC1967Proxy(
+            address(implementation),
+            initData
+        );
+        
+        return Router(address(proxy));
+    }
+
     function setUp() public {
         owner = address(this);
         user1 = makeAddr("user1");
@@ -54,13 +76,23 @@ contract RouterTest is Test {
         swapModule = new MockSwapModule();
         fixedOutputSwapModule = new MockFixedOutputSwapModule();
 
-        // Deploy router directly (no proxy)
-        router = new Router(address(gateway), address(swapModule));
+        // Deploy router with a proxy to properly initialize it
+        router = createInitializedRouter(address(gateway), address(swapModule));
     }
 
     // Helper function to create a router with the fixed output swap module
     function createFixedOutputRouter() internal returns (Router) {
-        return new Router(address(gateway), address(fixedOutputSwapModule));
+        return createInitializedRouter(address(gateway), address(fixedOutputSwapModule));
+    }
+
+    // Helper function for access control error expectations
+    function expectAccessControlError(address account) internal {
+        bytes32 role = 0x00; // DEFAULT_ADMIN_ROLE
+        vm.expectRevert(abi.encodeWithSelector(
+            bytes4(keccak256("AccessControlUnauthorizedAccount(address,bytes32)")),
+            account,
+            role
+        ));
     }
 
     function test_SetIntentContract() public {
@@ -79,7 +111,7 @@ contract RouterTest is Test {
     function test_SetIntentContract_NonAdminReverts() public {
         uint256 chainId = 1;
         vm.prank(user1);
-        vm.expectRevert(abi.encodeWithSelector(Router.Unauthorized.selector, user1));
+        expectAccessControlError(user1);
         router.setIntentContract(chainId, user2);
     }
 
@@ -126,6 +158,13 @@ contract RouterTest is Test {
         string memory name = "USDC";
         router.addToken(name);
         vm.expectRevert("Token already exists");
+        router.addToken(name);
+    }
+
+    function test_AddToken_NonAdminReverts() public {
+        string memory name = "USDC";
+        vm.prank(user1);
+        expectAccessControlError(user1);
         router.addToken(name);
     }
 
@@ -181,6 +220,18 @@ contract RouterTest is Test {
         router.addTokenAssociation(name, chainId, asset2, zrc20);
     }
 
+    function test_AddTokenAssociation_NonAdminReverts() public {
+        string memory name = "USDC";
+        uint256 chainId = 1;
+        address asset = makeAddr("asset");
+        address zrc20 = makeAddr("zrc20");
+        
+        router.addToken(name);
+        vm.prank(user1);
+        expectAccessControlError(user1);
+        router.addTokenAssociation(name, chainId, asset, zrc20);
+    }
+
     function test_UpdateTokenAssociation() public {
         string memory name = "USDC";
         uint256 chainId = 1;
@@ -212,6 +263,20 @@ contract RouterTest is Test {
         router.updateTokenAssociation(name, chainId, asset, zrc20);
     }
 
+    function test_UpdateTokenAssociation_NonAdminReverts() public {
+        string memory name = "USDC";
+        uint256 chainId = 1;
+        address asset = makeAddr("asset");
+        address zrc20 = makeAddr("zrc20");
+        
+        router.addToken(name);
+        router.addTokenAssociation(name, chainId, asset, zrc20);
+        
+        vm.prank(user1);
+        expectAccessControlError(user1);
+        router.updateTokenAssociation(name, chainId, asset, zrc20);
+    }
+
     function test_RemoveTokenAssociation() public {
         string memory name = "USDC";
         uint256 chainId = 1;
@@ -235,6 +300,20 @@ contract RouterTest is Test {
 
         router.addToken(name);
         vm.expectRevert("Association does not exist");
+        router.removeTokenAssociation(name, chainId);
+    }
+
+    function test_RemoveTokenAssociation_NonAdminReverts() public {
+        string memory name = "USDC";
+        uint256 chainId = 1;
+        address asset = makeAddr("asset");
+        address zrc20 = makeAddr("zrc20");
+        
+        router.addToken(name);
+        router.addTokenAssociation(name, chainId, asset, zrc20);
+        
+        vm.prank(user1);
+        expectAccessControlError(user1);
         router.removeTokenAssociation(name, chainId);
     }
 
@@ -271,31 +350,6 @@ contract RouterTest is Test {
         assertEq(tokens.length, 2);
         assertEq(tokens[0], name1);
         assertEq(tokens[1], name2);
-    }
-
-    function test_NonAdminCannotModify() public {
-        string memory name = "USDC";
-        uint256 chainId = 1;
-        address asset = makeAddr("asset");
-        address zrc20 = makeAddr("zrc20");
-
-        vm.prank(user1);
-        vm.expectRevert(abi.encodeWithSelector(Router.Unauthorized.selector, user1));
-        router.addToken(name);
-
-        router.addToken(name);
-        vm.prank(user1);
-        vm.expectRevert(abi.encodeWithSelector(Router.Unauthorized.selector, user1));
-        router.addTokenAssociation(name, chainId, asset, zrc20);
-
-        router.addTokenAssociation(name, chainId, asset, zrc20);
-        vm.prank(user1);
-        vm.expectRevert(abi.encodeWithSelector(Router.Unauthorized.selector, user1));
-        router.updateTokenAssociation(name, chainId, asset, zrc20);
-
-        vm.prank(user1);
-        vm.expectRevert(abi.encodeWithSelector(Router.Unauthorized.selector, user1));
-        router.removeTokenAssociation(name, chainId);
     }
 
     function test_OnCall_Success() public {
@@ -441,7 +495,7 @@ contract RouterTest is Test {
     function test_SetWithdrawGasLimit_NonAdminReverts() public {
         uint256 newGasLimit = 200000;
         vm.prank(user1);
-        vm.expectRevert(abi.encodeWithSelector(Router.Unauthorized.selector, user1));
+        expectAccessControlError(user1);
         router.setWithdrawGasLimit(newGasLimit);
     }
 
@@ -529,8 +583,6 @@ contract RouterTest is Test {
         // 3. The remaining 7 ether was deducted from the amount
         // 4. Expected actualAmount is 93 ether (100 - 7)
     }
-
-
 
     function test_OnCall_DifferentDecimals() public {
         // Create a router using the fixed output swap module
@@ -627,5 +679,12 @@ contract RouterTest is Test {
         // Verify approvals were made to the gateway
         assertTrue(targetZRC20.allowance(address(fixedRouter), address(gateway)) > 0, "Router should approve target ZRC20 to gateway");
         assertTrue(gasZRC20.allowance(address(fixedRouter), address(gateway)) > 0, "Router should approve gas ZRC20 to gateway");
+    }
+
+    function test_UpdateGateway_NonAdminReverts() public {
+        address newGateway = makeAddr("newGateway");
+        vm.prank(user1);
+        expectAccessControlError(user1);
+        router.updateGateway(newGateway);
     }
 } 
