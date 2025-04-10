@@ -3,6 +3,8 @@ pragma solidity 0.8.26;
 
 import {Test, console2} from "forge-std/Test.sol";
 import {Router} from "../src/Router.sol";
+import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
+import {UUPSUpgradeable} from "@openzeppelin/contracts/proxy/utils/UUPSUpgradeable.sol";
 import {MockGateway} from "./mocks/MockGateway.sol";
 import {MockToken} from "./mocks/MockToken.sol";
 import {PayloadUtils} from "../src/utils/PayloadUtils.sol";
@@ -40,6 +42,31 @@ contract RouterTest is Test {
         uint256 amount,
         uint256 tip
     );
+    // UUPS upgrade event
+    event Upgraded(address indexed implementation);
+    event PauserAdded(address indexed pauser);
+    event PauserRemoved(address indexed pauser);
+
+    // Helper function to create a properly initialized Router
+    function createInitializedRouter(address gatewayAddr, address swapModuleAddr) internal returns (Router) {
+        // Deploy implementation
+        Router implementation = new Router();
+        
+        // Prepare initialization data
+        bytes memory initData = abi.encodeWithSelector(
+            Router.initialize.selector,
+            gatewayAddr,
+            swapModuleAddr
+        );
+        
+        // Deploy proxy
+        ERC1967Proxy proxy = new ERC1967Proxy(
+            address(implementation),
+            initData
+        );
+        
+        return Router(address(proxy));
+    }
 
     function setUp() public {
         owner = address(this);
@@ -54,13 +81,23 @@ contract RouterTest is Test {
         swapModule = new MockSwapModule();
         fixedOutputSwapModule = new MockFixedOutputSwapModule();
 
-        // Deploy router directly (no proxy)
-        router = new Router(address(gateway), address(swapModule));
+        // Deploy router with a proxy to properly initialize it
+        router = createInitializedRouter(address(gateway), address(swapModule));
     }
 
     // Helper function to create a router with the fixed output swap module
     function createFixedOutputRouter() internal returns (Router) {
-        return new Router(address(gateway), address(fixedOutputSwapModule));
+        return createInitializedRouter(address(gateway), address(fixedOutputSwapModule));
+    }
+
+    // Helper function for access control error expectations
+    function expectAccessControlError(address account) internal {
+        bytes32 role = 0x00; // DEFAULT_ADMIN_ROLE
+        vm.expectRevert(abi.encodeWithSelector(
+            bytes4(keccak256("AccessControlUnauthorizedAccount(address,bytes32)")),
+            account,
+            role
+        ));
     }
 
     function test_SetIntentContract() public {
@@ -79,7 +116,7 @@ contract RouterTest is Test {
     function test_SetIntentContract_NonAdminReverts() public {
         uint256 chainId = 1;
         vm.prank(user1);
-        vm.expectRevert(abi.encodeWithSelector(Router.Unauthorized.selector, user1));
+        expectAccessControlError(user1);
         router.setIntentContract(chainId, user2);
     }
 
@@ -126,6 +163,13 @@ contract RouterTest is Test {
         string memory name = "USDC";
         router.addToken(name);
         vm.expectRevert("Token already exists");
+        router.addToken(name);
+    }
+
+    function test_AddToken_NonAdminReverts() public {
+        string memory name = "USDC";
+        vm.prank(user1);
+        expectAccessControlError(user1);
         router.addToken(name);
     }
 
@@ -181,6 +225,18 @@ contract RouterTest is Test {
         router.addTokenAssociation(name, chainId, asset2, zrc20);
     }
 
+    function test_AddTokenAssociation_NonAdminReverts() public {
+        string memory name = "USDC";
+        uint256 chainId = 1;
+        address asset = makeAddr("asset");
+        address zrc20 = makeAddr("zrc20");
+        
+        router.addToken(name);
+        vm.prank(user1);
+        expectAccessControlError(user1);
+        router.addTokenAssociation(name, chainId, asset, zrc20);
+    }
+
     function test_UpdateTokenAssociation() public {
         string memory name = "USDC";
         uint256 chainId = 1;
@@ -212,6 +268,20 @@ contract RouterTest is Test {
         router.updateTokenAssociation(name, chainId, asset, zrc20);
     }
 
+    function test_UpdateTokenAssociation_NonAdminReverts() public {
+        string memory name = "USDC";
+        uint256 chainId = 1;
+        address asset = makeAddr("asset");
+        address zrc20 = makeAddr("zrc20");
+        
+        router.addToken(name);
+        router.addTokenAssociation(name, chainId, asset, zrc20);
+        
+        vm.prank(user1);
+        expectAccessControlError(user1);
+        router.updateTokenAssociation(name, chainId, asset, zrc20);
+    }
+
     function test_RemoveTokenAssociation() public {
         string memory name = "USDC";
         uint256 chainId = 1;
@@ -235,6 +305,20 @@ contract RouterTest is Test {
 
         router.addToken(name);
         vm.expectRevert("Association does not exist");
+        router.removeTokenAssociation(name, chainId);
+    }
+
+    function test_RemoveTokenAssociation_NonAdminReverts() public {
+        string memory name = "USDC";
+        uint256 chainId = 1;
+        address asset = makeAddr("asset");
+        address zrc20 = makeAddr("zrc20");
+        
+        router.addToken(name);
+        router.addTokenAssociation(name, chainId, asset, zrc20);
+        
+        vm.prank(user1);
+        expectAccessControlError(user1);
         router.removeTokenAssociation(name, chainId);
     }
 
@@ -271,31 +355,6 @@ contract RouterTest is Test {
         assertEq(tokens.length, 2);
         assertEq(tokens[0], name1);
         assertEq(tokens[1], name2);
-    }
-
-    function test_NonAdminCannotModify() public {
-        string memory name = "USDC";
-        uint256 chainId = 1;
-        address asset = makeAddr("asset");
-        address zrc20 = makeAddr("zrc20");
-
-        vm.prank(user1);
-        vm.expectRevert(abi.encodeWithSelector(Router.Unauthorized.selector, user1));
-        router.addToken(name);
-
-        router.addToken(name);
-        vm.prank(user1);
-        vm.expectRevert(abi.encodeWithSelector(Router.Unauthorized.selector, user1));
-        router.addTokenAssociation(name, chainId, asset, zrc20);
-
-        router.addTokenAssociation(name, chainId, asset, zrc20);
-        vm.prank(user1);
-        vm.expectRevert(abi.encodeWithSelector(Router.Unauthorized.selector, user1));
-        router.updateTokenAssociation(name, chainId, asset, zrc20);
-
-        vm.prank(user1);
-        vm.expectRevert(abi.encodeWithSelector(Router.Unauthorized.selector, user1));
-        router.removeTokenAssociation(name, chainId);
     }
 
     function test_OnCall_Success() public {
@@ -441,7 +500,7 @@ contract RouterTest is Test {
     function test_SetWithdrawGasLimit_NonAdminReverts() public {
         uint256 newGasLimit = 200000;
         vm.prank(user1);
-        vm.expectRevert(abi.encodeWithSelector(Router.Unauthorized.selector, user1));
+        expectAccessControlError(user1);
         router.setWithdrawGasLimit(newGasLimit);
     }
 
@@ -529,8 +588,6 @@ contract RouterTest is Test {
         // 3. The remaining 7 ether was deducted from the amount
         // 4. Expected actualAmount is 93 ether (100 - 7)
     }
-
-
 
     function test_OnCall_DifferentDecimals() public {
         // Create a router using the fixed output swap module
@@ -627,5 +684,156 @@ contract RouterTest is Test {
         // Verify approvals were made to the gateway
         assertTrue(targetZRC20.allowance(address(fixedRouter), address(gateway)) > 0, "Router should approve target ZRC20 to gateway");
         assertTrue(gasZRC20.allowance(address(fixedRouter), address(gateway)) > 0, "Router should approve gas ZRC20 to gateway");
+    }
+
+    function test_UpdateGateway_NonAdminReverts() public {
+        address newGateway = makeAddr("newGateway");
+        vm.prank(user1);
+        expectAccessControlError(user1);
+        router.updateGateway(newGateway);
+    }
+    
+    function test_Pause_Basic() public {
+        // Check initial state
+        assertFalse(router.paused(), "Router should not be paused initially");
+        
+        // Test that someone with PAUSER_ROLE can pause
+        assertTrue(router.hasRole(router.PAUSER_ROLE(), address(this)), "Test contract should have PAUSER_ROLE");
+        router.pause();
+        assertTrue(router.paused(), "Router should be paused after calling pause()");
+        
+        // Test that someone with DEFAULT_ADMIN_ROLE can unpause
+        assertTrue(router.hasRole(0x00, address(this)), "Test contract should have DEFAULT_ADMIN_ROLE");
+        router.unpause();
+        assertFalse(router.paused(), "Router should not be paused after calling unpause()");
+    }
+    
+    function test_RevertWhen_NonPauserTriesToPause() public {
+        // Make sure user1 doesn't have PAUSER_ROLE
+        bytes32 pauserRole = router.PAUSER_ROLE();
+        assertFalse(router.hasRole(pauserRole, user1), "User1 should not have PAUSER_ROLE");
+        
+        // Set up the prank
+        vm.prank(user1);
+        
+        // Track whether the call reverted
+        bool hasReverted = false;
+        
+        try router.pause() {
+            // If we reach here, the call succeeded, which should not happen
+            hasReverted = false;
+        } catch {
+            // If we reach here, the call reverted as expected
+            hasReverted = true;
+        }
+        
+        // Verify that the call reverted
+        assertTrue(hasReverted, "Call to pause() should revert when called by non-pauser");
+        
+        // Verify that the router is still not paused
+        assertFalse(router.paused(), "Router should not be paused");
+    }
+    
+    function test_RevertWhen_NonAdminTriesToUnpause() public {
+        // Pause first
+        router.pause();
+        assertTrue(router.paused(), "Router should be paused");
+        
+        // Make sure user1 doesn't have DEFAULT_ADMIN_ROLE
+        bytes32 adminRole = 0x00; // DEFAULT_ADMIN_ROLE
+        assertFalse(router.hasRole(adminRole, user1), "User1 should not have DEFAULT_ADMIN_ROLE");
+        
+        // Set up the prank
+        vm.prank(user1);
+        
+        // Track whether the call reverted
+        bool hasReverted = false;
+        
+        try router.unpause() {
+            // If we reach here, the call succeeded, which should not happen
+            hasReverted = false;
+        } catch {
+            // If we reach here, the call reverted as expected
+            hasReverted = true;
+        }
+        
+        // Verify that the call reverted
+        assertTrue(hasReverted, "Call to unpause() should revert when called by non-admin");
+        
+        // Verify that the router is still paused
+        assertTrue(router.paused(), "Router should still be paused");
+    }
+    
+    function test_OnCall_PausedReverts() public {
+        // Setup a minimal test for onCall failing when paused
+        uint256 sourceChainId = 1;
+        uint256 targetChainId = 2;
+        address sourceIntentContract = makeAddr("sourceIntentContract");
+        router.setIntentContract(sourceChainId, sourceIntentContract);
+        
+        // Setup context and a dummy payload
+        IGateway.ZetaChainMessageContext memory context = IGateway.ZetaChainMessageContext({
+            chainID: sourceChainId,
+            sender: abi.encodePacked(sourceIntentContract),
+            senderEVM: sourceIntentContract
+        });
+        bytes memory dummyPayload = new bytes(0);
+        
+        // Pause the router
+        router.pause();
+        assertTrue(router.paused(), "Router should be paused");
+        
+        // Set up the prank
+        vm.prank(address(gateway));
+        
+        // Track whether the call reverted
+        bool hasReverted = false;
+        
+        try router.onCall(context, address(0), 0, dummyPayload) {
+            // If we reach here, the call succeeded, which should not happen
+            hasReverted = false;
+        } catch {
+            // If we reach here, the call reverted as expected
+            hasReverted = true;
+        }
+        
+        // Verify that the call reverted
+        assertTrue(hasReverted, "Call to onCall() should revert when router is paused");
+    }
+    
+    function test_RouterUpgrade() public {
+        // Create a new implementation
+        Router newImplementation = new Router();
+        
+        // Get original gateway and swapModule addresses from current router
+        address originalGateway = router.gateway();
+        address originalSwapModule = router.swapModule();
+        uint256 originalGasLimit = router.withdrawGasLimit();
+        
+        // Upgrade the router to the new implementation
+        vm.expectEmit(true, true, false, false);
+        // Define the Upgraded event directly
+        emit Upgraded(address(newImplementation));
+        router.upgradeToAndCall(address(newImplementation), "");
+        
+        // Verify that storage was preserved after upgrade
+        assertEq(router.gateway(), originalGateway, "Gateway address should be preserved after upgrade");
+        assertEq(router.swapModule(), originalSwapModule, "Swap module address should be preserved after upgrade");
+        assertEq(router.withdrawGasLimit(), originalGasLimit, "Withdraw gas limit should be preserved after upgrade");
+        
+        // Verify that we can still call functions on the upgraded router
+        uint256 newGasLimit = originalGasLimit + 100000;
+        router.setWithdrawGasLimit(newGasLimit);
+        assertEq(router.withdrawGasLimit(), newGasLimit, "Should be able to set new values after upgrade");
+    }
+    
+    function test_RouterUpgrade_OnlyAdminCanUpgrade() public {
+        // Create a new implementation
+        Router newImplementation = new Router();
+        
+        // Attempt to upgrade as non-admin
+        vm.prank(user1);
+        expectAccessControlError(user1);
+        router.upgradeToAndCall(address(newImplementation), "");
     }
 } 

@@ -1,6 +1,10 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.26;
 
+import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
+import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "./interfaces/IUniswapV3Router.sol";
@@ -14,8 +18,12 @@ import "./utils/PayloadUtils.sol";
  * @title Router
  * @dev Routes CCTX and handles ZRC20 swaps on ZetaChain
  */
-contract Router {
+contract Router is Initializable, UUPSUpgradeable, AccessControlUpgradeable, PausableUpgradeable {
     using SafeERC20 for IERC20;
+
+    // Role definitions
+    // Removed ADMIN_ROLE and using only DEFAULT_ADMIN_ROLE
+    bytes32 public constant PAUSER_ROLE = keccak256("PAUSER_ROLE");
 
     // Default gas limit for withdraw operations
     uint256 private constant DEFAULT_WITHDRAW_GAS_LIMIT = 300000;
@@ -27,8 +35,6 @@ contract Router {
     address public gateway;
     // Swap module address
     address public swapModule;
-    // Admin address
-    address public immutable admin;
 
     // Mapping from chain ID to intent contract address
     mapping(uint256 => address) public intentContracts;
@@ -65,23 +71,79 @@ contract Router {
         uint256 amount,
         uint256 tip
     );
+    // Event emitted when the gateway is updated
+    event GatewayUpdated(address indexed oldGateway, address indexed newGateway);
+    // Event emitted when the swap module is updated
+    event SwapModuleUpdated(address indexed oldSwapModule, address indexed newSwapModule);
 
-    // Error for unauthorized access
-    error Unauthorized(address caller);
+    /// @custom:oz-upgrades-unsafe-allow constructor
+    constructor() {
+        _disableInitializers();
+    }
 
     /**
-     * @dev Constructor that sets the gateway and swap module addresses
+     * @dev Initializes the contract
      * @param _gateway The address of the gateway contract
      * @param _swapModule The address of the swap module contract
      */
-    constructor(address _gateway, address _swapModule) {
+    function initialize(address _gateway, address _swapModule) public initializer {
+        __AccessControl_init();
+        __UUPSUpgradeable_init();
+        __Pausable_init();
+        
         require(_gateway != address(0), "Invalid gateway address");
         require(_swapModule != address(0), "Invalid swap module address");
 
+        // Set up admin role
+        _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
+        _grantRole(PAUSER_ROLE, msg.sender);
+        
         gateway = _gateway;
         swapModule = _swapModule;
-        admin = msg.sender;
         withdrawGasLimit = DEFAULT_WITHDRAW_GAS_LIMIT;
+    }
+
+    /**
+     * @dev Function that authorizes an upgrade, can only be called by an account with the admin role
+     * @param newImplementation Address of the new implementation
+     */
+    function _authorizeUpgrade(address newImplementation) internal override onlyRole(DEFAULT_ADMIN_ROLE) {}
+
+    /**
+     * @dev Pauses the contract, preventing onCall operations
+     */
+    function pause() external onlyRole(PAUSER_ROLE) {
+        _pause();
+    }
+
+    /**
+     * @dev Unpauses the contract, allowing onCall operations
+     * Only DEFAULT_ADMIN_ROLE can unpause
+     */
+    function unpause() external onlyRole(DEFAULT_ADMIN_ROLE) {
+        _unpause();
+    }
+
+    /**
+     * @dev Updates the gateway address
+     * @param _gateway New gateway address
+     */
+    function updateGateway(address _gateway) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        require(_gateway != address(0), "Gateway cannot be zero address");
+        address oldGateway = gateway;
+        gateway = _gateway;
+        emit GatewayUpdated(oldGateway, _gateway);
+    }
+
+    /**
+     * @dev Updates the swap module address
+     * @param _swapModule New swap module address
+     */
+    function updateSwapModule(address _swapModule) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        require(_swapModule != address(0), "Swap module cannot be zero address");
+        address oldSwapModule = swapModule;
+        swapModule = _swapModule;
+        emit SwapModuleUpdated(oldSwapModule, _swapModule);
     }
 
     /**
@@ -114,16 +176,6 @@ contract Router {
         return amountIn / factor;
     }
 
-    /**
-     * @dev Modifier to restrict access to the admin
-     */
-    modifier onlyAdmin() {
-        if (msg.sender != admin) {
-            revert Unauthorized(msg.sender);
-        }
-        _;
-    }
-
     modifier onlyGateway() {
         require(msg.sender == gateway, "Only gateway can call this function");
         _;
@@ -141,7 +193,7 @@ contract Router {
         address zrc20,
         uint256 amountWithTip,
         bytes calldata payload
-    ) external onlyGateway {
+    ) external onlyGateway whenNotPaused {
         // Verify the call is coming from the intent contract for this chain
         require(intentContracts[context.chainID] == context.senderEVM, "Call must be from intent contract");
 
@@ -297,7 +349,7 @@ contract Router {
      * @param chainId The chain ID to set the intent contract for
      * @param intentContract The address of the intent contract
      */
-    function setIntentContract(uint256 chainId, address intentContract) public onlyAdmin {
+    function setIntentContract(uint256 chainId, address intentContract) public onlyRole(DEFAULT_ADMIN_ROLE) {
         require(intentContract != address(0), "Invalid intent contract address");
         intentContracts[chainId] = intentContract;
         emit IntentContractSet(chainId, intentContract);
@@ -316,7 +368,7 @@ contract Router {
      * @dev Adds a new supported token
      * @param name The name of the token (e.g., "USDC")
      */
-    function addToken(string calldata name) public onlyAdmin {
+    function addToken(string calldata name) public onlyRole(DEFAULT_ADMIN_ROLE) {
         require(bytes(name).length > 0, "Token name cannot be empty");
         require(!_supportedTokens[name], "Token already exists");
         
@@ -337,7 +389,7 @@ contract Router {
         uint256 chainId,
         address asset,
         address zrc20
-    ) public onlyAdmin {
+    ) public onlyRole(DEFAULT_ADMIN_ROLE) {
         require(_supportedTokens[name], "Token does not exist");
         require(asset != address(0), "Invalid asset address");
         require(zrc20 != address(0), "Invalid ZRC20 address");
@@ -363,7 +415,7 @@ contract Router {
         uint256 chainId,
         address asset,
         address zrc20
-    ) public onlyAdmin {
+    ) public onlyRole(DEFAULT_ADMIN_ROLE) {
         require(_supportedTokens[name], "Token does not exist");
         require(asset != address(0), "Invalid asset address");
         require(zrc20 != address(0), "Invalid ZRC20 address");
@@ -384,7 +436,7 @@ contract Router {
     function removeTokenAssociation(
         string calldata name,
         uint256 chainId
-    ) public onlyAdmin {
+    ) public onlyRole(DEFAULT_ADMIN_ROLE) {
         require(_supportedTokens[name], "Token does not exist");
         require(_tokenAssets[name][chainId] != address(0), "Association does not exist");
         
@@ -475,7 +527,7 @@ contract Router {
      * @dev Updates the withdraw gas limit
      * @param newGasLimit The new gas limit to set
      */
-    function setWithdrawGasLimit(uint256 newGasLimit) public onlyAdmin {
+    function setWithdrawGasLimit(uint256 newGasLimit) public onlyRole(DEFAULT_ADMIN_ROLE) {
         require(newGasLimit > 0, "Gas limit cannot be zero");
         withdrawGasLimit = newGasLimit;
     }
