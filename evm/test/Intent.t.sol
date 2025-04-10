@@ -2,7 +2,7 @@
 pragma solidity 0.8.26;
 
 import {Test, console2} from "forge-std/Test.sol";
-import {Intent} from "../src/intent.sol";
+import {Intent} from "../src/Intent.sol";
 import {MockGateway} from "./mocks/MockGateway.sol";
 import {MockERC20} from "./mocks/MockERC20.sol";
 import {PayloadUtils} from "../src/utils/PayloadUtils.sol";
