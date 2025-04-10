@@ -50,8 +50,8 @@ interface IUniswapV2Router02 {
      * @param path Array of token addresses. path.length must be >= 2.
      * @return amounts Array of input token amounts.
      */
-    function getAmountsIn(uint256 amountOut, address[] calldata path) 
-        external 
-        view 
+    function getAmountsIn(uint256 amountOut, address[] calldata path)
+        external
+        view
         returns (uint256[] memory amounts);
 }

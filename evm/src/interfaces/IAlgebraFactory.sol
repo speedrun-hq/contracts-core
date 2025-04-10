@@ -13,7 +13,7 @@ interface IAlgebraFactory {
      * @return pool The address of the pool for the token pair
      */
     function poolByPair(address tokenA, address tokenB) external view returns (address pool);
-    
+
     /**
      * @dev Creates a pool for the given token pair if it doesn't exist
      * @param tokenA The address of one token
@@ -21,4 +21,4 @@ interface IAlgebraFactory {
      * @return pool The address of the pool for the token pair
      */
     function createPool(address tokenA, address tokenB) external returns (address pool);
-} 
+}

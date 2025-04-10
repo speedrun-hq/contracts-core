@@ -87,4 +87,19 @@ contract SwapUniswapV2 is ISwap {
         // Transfer output tokens to sender
         IERC20(tokenOut).safeTransfer(msg.sender, amountOut);
     }
+
+    /**
+     * @dev Extended swap function with token name (ignored in this implementation)
+     */
+    function swap(
+        address tokenIn,
+        address tokenOut,
+        uint256 amountIn,
+        address gasZRC20,
+        uint256 gasFee,
+        string memory
+    ) external returns (uint256 amountOut) {
+        // Just delegate to the original function since this implementation doesn't use the token name
+        return swap(tokenIn, tokenOut, amountIn, gasZRC20, gasFee);
+    }
 }

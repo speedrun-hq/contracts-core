@@ -29,10 +29,7 @@ interface IAlgebraPool {
      * @return amount0 The delta of token0 balance
      * @return amount1 The delta of token1 balance
      */
-    function swap(
-        address recipient,
-        SwapParams memory params
-    ) external returns (int256 amount0, int256 amount1);
+    function swap(address recipient, SwapParams memory params) external returns (int256 amount0, int256 amount1);
 
     /**
      * @dev Get the address of token0
@@ -45,4 +42,4 @@ interface IAlgebraPool {
      * @return The address of token1
      */
     function token1() external view returns (address);
-} 
+}

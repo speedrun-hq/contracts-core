@@ -51,7 +51,7 @@ contract MockUniswapV2Router is IUniswapV2Router02 {
         amounts[0] = amountOut;
         amounts[1] = amountOut;
     }
-    
+
     function getAmountsIn(uint256 amountOut, address[] calldata path)
         external
         pure
