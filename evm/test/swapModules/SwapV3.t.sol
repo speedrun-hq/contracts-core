@@ -2,8 +2,8 @@
 pragma solidity 0.8.26;
 
 import "forge-std/Test.sol";
-import "../src/SwapV3.sol";
-import "../src/interfaces/IUniswapV3Router.sol";
+import "../../src/swapModules/SwapV3.sol";
+import "../../src/interfaces/IUniswapV3Router.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 
