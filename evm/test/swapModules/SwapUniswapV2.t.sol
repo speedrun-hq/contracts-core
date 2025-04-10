@@ -29,7 +29,7 @@ contract MockUniswapV2Router is IUniswapV2Router02 {
     ) external returns (uint256[] memory amounts) {
         // Mock 1:1 swap for testing
         IERC20(path[0]).transferFrom(msg.sender, address(this), amountIn);
-        IERC20(path[1]).transfer(to, amountIn);
+        IERC20(path[path.length - 1]).transfer(to, amountIn);
 
         amounts = new uint256[](2);
         amounts[0] = amountIn;
@@ -45,11 +45,24 @@ contract MockUniswapV2Router is IUniswapV2Router02 {
     ) external returns (uint256[] memory amounts) {
         // Mock 1:1 swap for testing
         IERC20(path[0]).transferFrom(msg.sender, address(this), amountOut);
-        IERC20(path[1]).transfer(to, amountOut);
+        IERC20(path[path.length - 1]).transfer(to, amountOut);
 
         amounts = new uint256[](2);
         amounts[0] = amountOut;
         amounts[1] = amountOut;
+    }
+    
+    function getAmountsIn(uint256 amountOut, address[] calldata path)
+        external
+        pure
+        returns (uint256[] memory amounts)
+    {
+        // Mock 1:1 swap for testing (amountIn = amountOut)
+        amounts = new uint256[](path.length);
+        for (uint256 i = 0; i < path.length; i++) {
+            amounts[i] = amountOut;
+        }
+        return amounts;
     }
 
     function swapExactETHForTokens(uint256, address[] calldata, address, uint256)
