@@ -44,6 +44,8 @@ contract RouterTest is Test {
     );
     // UUPS upgrade event
     event Upgraded(address indexed implementation);
+    event PauserAdded(address indexed pauser);
+    event PauserRemoved(address indexed pauser);
 
     // Helper function to create a properly initialized Router
     function createInitializedRouter(address gatewayAddr, address swapModuleAddr) internal returns (Router) {
@@ -689,6 +691,114 @@ contract RouterTest is Test {
         vm.prank(user1);
         expectAccessControlError(user1);
         router.updateGateway(newGateway);
+    }
+    
+    function test_Pause_Basic() public {
+        // Check initial state
+        assertFalse(router.paused(), "Router should not be paused initially");
+        
+        // Test that someone with PAUSER_ROLE can pause
+        assertTrue(router.hasRole(router.PAUSER_ROLE(), address(this)), "Test contract should have PAUSER_ROLE");
+        router.pause();
+        assertTrue(router.paused(), "Router should be paused after calling pause()");
+        
+        // Test that someone with DEFAULT_ADMIN_ROLE can unpause
+        assertTrue(router.hasRole(0x00, address(this)), "Test contract should have DEFAULT_ADMIN_ROLE");
+        router.unpause();
+        assertFalse(router.paused(), "Router should not be paused after calling unpause()");
+    }
+    
+    function test_RevertWhen_NonPauserTriesToPause() public {
+        // Make sure user1 doesn't have PAUSER_ROLE
+        bytes32 pauserRole = router.PAUSER_ROLE();
+        assertFalse(router.hasRole(pauserRole, user1), "User1 should not have PAUSER_ROLE");
+        
+        // Set up the prank
+        vm.prank(user1);
+        
+        // Track whether the call reverted
+        bool hasReverted = false;
+        
+        try router.pause() {
+            // If we reach here, the call succeeded, which should not happen
+            hasReverted = false;
+        } catch {
+            // If we reach here, the call reverted as expected
+            hasReverted = true;
+        }
+        
+        // Verify that the call reverted
+        assertTrue(hasReverted, "Call to pause() should revert when called by non-pauser");
+        
+        // Verify that the router is still not paused
+        assertFalse(router.paused(), "Router should not be paused");
+    }
+    
+    function test_RevertWhen_NonAdminTriesToUnpause() public {
+        // Pause first
+        router.pause();
+        assertTrue(router.paused(), "Router should be paused");
+        
+        // Make sure user1 doesn't have DEFAULT_ADMIN_ROLE
+        bytes32 adminRole = 0x00; // DEFAULT_ADMIN_ROLE
+        assertFalse(router.hasRole(adminRole, user1), "User1 should not have DEFAULT_ADMIN_ROLE");
+        
+        // Set up the prank
+        vm.prank(user1);
+        
+        // Track whether the call reverted
+        bool hasReverted = false;
+        
+        try router.unpause() {
+            // If we reach here, the call succeeded, which should not happen
+            hasReverted = false;
+        } catch {
+            // If we reach here, the call reverted as expected
+            hasReverted = true;
+        }
+        
+        // Verify that the call reverted
+        assertTrue(hasReverted, "Call to unpause() should revert when called by non-admin");
+        
+        // Verify that the router is still paused
+        assertTrue(router.paused(), "Router should still be paused");
+    }
+    
+    function test_OnCall_PausedReverts() public {
+        // Setup a minimal test for onCall failing when paused
+        uint256 sourceChainId = 1;
+        uint256 targetChainId = 2;
+        address sourceIntentContract = makeAddr("sourceIntentContract");
+        router.setIntentContract(sourceChainId, sourceIntentContract);
+        
+        // Setup context and a dummy payload
+        IGateway.ZetaChainMessageContext memory context = IGateway.ZetaChainMessageContext({
+            chainID: sourceChainId,
+            sender: abi.encodePacked(sourceIntentContract),
+            senderEVM: sourceIntentContract
+        });
+        bytes memory dummyPayload = new bytes(0);
+        
+        // Pause the router
+        router.pause();
+        assertTrue(router.paused(), "Router should be paused");
+        
+        // Set up the prank
+        vm.prank(address(gateway));
+        
+        // Track whether the call reverted
+        bool hasReverted = false;
+        
+        try router.onCall(context, address(0), 0, dummyPayload) {
+            // If we reach here, the call succeeded, which should not happen
+            hasReverted = false;
+        } catch {
+            // If we reach here, the call reverted as expected
+            hasReverted = true;
+        }
+        
+        // Verify that the call reverted
+        assertTrue(hasReverted, "Call to onCall() should revert when router is paused");
     }
     
     function test_RouterUpgrade() public {
