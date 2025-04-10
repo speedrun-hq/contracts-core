@@ -2,9 +2,9 @@
 pragma solidity 0.8.26;
 
 import {Script, console2} from "forge-std/Script.sol";
-import {SwapUniswapV2} from "../src/swapModules/SwapV2.sol";
+import {SwapUniswapV3} from "../src/swapModules/SwapUniswapV3.sol";
 
-contract SwapUniswapV2Script is Script {
+contract SwapUniswapV3Script is Script {
     function setUp() public {}
 
     function run() public {
@@ -12,13 +12,13 @@ contract SwapUniswapV2Script is Script {
         vm.startBroadcast(deployerPrivateKey);
 
         // Get addresses from environment variables
-        address swapRouter = vm.envAddress("UNISWAP_V2_ROUTER");
+        address swapRouter = vm.envAddress("UNISWAP_V3_ROUTER");
         address wzeta = vm.envAddress("WZETA");
 
-        // Deploy SwapUniswapV2
-        SwapUniswapV2 swapUniswapV2 = new SwapUniswapV2(swapRouter, wzeta);
-        console2.log("SwapUniswapV2 deployed to:", address(swapUniswapV2));
-        console2.log("Uniswap V2 Router:", swapRouter);
+        // Deploy SwapUniswapV3
+        SwapUniswapV3 swapUniswapV3 = new SwapUniswapV3(swapRouter, wzeta);
+        console2.log("SwapUniswapV3 deployed to:", address(swapUniswapV3));
+        console2.log("Uniswap V3 Router:", swapRouter);
         console2.log("WZETA:", wzeta);
 
         vm.stopBroadcast();

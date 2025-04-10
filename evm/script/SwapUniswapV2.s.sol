@@ -2,7 +2,7 @@
 pragma solidity 0.8.26;
 
 import {Script, console2} from "forge-std/Script.sol";
-import {SwapUniswapV2} from "../src/swapModules/SwapV2.sol";
+import {SwapUniswapV2} from "../src/swapModules/SwapUniswapV2.sol";
 
 contract SwapUniswapV2Script is Script {
     function setUp() public {}
