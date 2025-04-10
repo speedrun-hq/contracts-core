@@ -4,6 +4,7 @@ pragma solidity 0.8.26;
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "./interfaces/IUniswapV3Router.sol";
@@ -17,11 +18,12 @@ import "./utils/PayloadUtils.sol";
  * @title Router
  * @dev Routes CCTX and handles ZRC20 swaps on ZetaChain
  */
-contract Router is Initializable, UUPSUpgradeable, AccessControlUpgradeable {
+contract Router is Initializable, UUPSUpgradeable, AccessControlUpgradeable, PausableUpgradeable {
     using SafeERC20 for IERC20;
 
     // Role definitions
     // Removed ADMIN_ROLE and using only DEFAULT_ADMIN_ROLE
+    bytes32 public constant PAUSER_ROLE = keccak256("PAUSER_ROLE");
 
     // Default gas limit for withdraw operations
     uint256 private constant DEFAULT_WITHDRAW_GAS_LIMIT = 300000;
@@ -87,12 +89,14 @@ contract Router is Initializable, UUPSUpgradeable, AccessControlUpgradeable {
     function initialize(address _gateway, address _swapModule) public initializer {
         __AccessControl_init();
         __UUPSUpgradeable_init();
+        __Pausable_init();
         
         require(_gateway != address(0), "Invalid gateway address");
         require(_swapModule != address(0), "Invalid swap module address");
 
         // Set up admin role
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
+        _grantRole(PAUSER_ROLE, msg.sender);
         
         gateway = _gateway;
         swapModule = _swapModule;
@@ -104,6 +108,21 @@ contract Router is Initializable, UUPSUpgradeable, AccessControlUpgradeable {
      * @param newImplementation Address of the new implementation
      */
     function _authorizeUpgrade(address newImplementation) internal override onlyRole(DEFAULT_ADMIN_ROLE) {}
+
+    /**
+     * @dev Pauses the contract, preventing onCall operations
+     */
+    function pause() external onlyRole(PAUSER_ROLE) {
+        _pause();
+    }
+
+    /**
+     * @dev Unpauses the contract, allowing onCall operations
+     * Only DEFAULT_ADMIN_ROLE can unpause
+     */
+    function unpause() external onlyRole(DEFAULT_ADMIN_ROLE) {
+        _unpause();
+    }
 
     /**
      * @dev Updates the gateway address
@@ -174,7 +193,7 @@ contract Router is Initializable, UUPSUpgradeable, AccessControlUpgradeable {
         address zrc20,
         uint256 amountWithTip,
         bytes calldata payload
-    ) external onlyGateway {
+    ) external onlyGateway whenNotPaused {
         // Verify the call is coming from the intent contract for this chain
         require(intentContracts[context.chainID] == context.senderEVM, "Call must be from intent contract");
 
