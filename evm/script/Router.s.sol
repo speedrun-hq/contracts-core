@@ -22,31 +22,24 @@ contract RouterScript is Script {
         address gateway = vm.envAddress("GATEWAY_ADDRESS");
         address swapModule = vm.envAddress("SWAP_MODULE_ADDRESS");
         address implementation = vm.envAddress("ROUTER_IMPLEMENTATION_ADDRESS");
-        
+
         vm.startBroadcast(deployerPrivateKey);
-        
+
         // Prepare initialization data
-        bytes memory initData = abi.encodeWithSelector(
-            Router.initialize.selector,
-            gateway,
-            swapModule
-        );
-        
+        bytes memory initData = abi.encodeWithSelector(Router.initialize.selector, gateway, swapModule);
+
         // Deploy proxy
-        ERC1967Proxy proxy = new ERC1967Proxy(
-            address(implementation),
-            initData
-        );
-        
+        ERC1967Proxy proxy = new ERC1967Proxy(address(implementation), initData);
+
         Router router = Router(address(proxy));
-        
+
         console2.log("Router deployed to:", address(router));
         // console2.log("Implementation at:", address(implementation));
         console2.log("Proxy at:", address(proxy));
         console2.log("Initialized with:");
         console2.log("- Gateway:", gateway);
         console2.log("- Swap Module:", swapModule);
-        
+
         vm.stopBroadcast();
     }
-} 
+}

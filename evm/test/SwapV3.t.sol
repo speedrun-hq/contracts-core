@@ -103,13 +103,7 @@ contract SwapV3Test is Test {
         uint256 expectedOutput = AMOUNT - GAS_FEE; // 1:1 swap with gas fee deduction
 
         vm.prank(user);
-        uint256 amountOut = swapV3.swap(
-            address(inputToken),
-            address(outputToken),
-            AMOUNT,
-            address(gasToken),
-            GAS_FEE
-        );
+        uint256 amountOut = swapV3.swap(address(inputToken), address(outputToken), AMOUNT, address(gasToken), GAS_FEE);
 
         assertEq(amountOut, expectedOutput, "Incorrect output amount");
         assertEq(inputToken.balanceOf(user), initialBalance - AMOUNT, "Input tokens not transferred from user");
@@ -121,13 +115,7 @@ contract SwapV3Test is Test {
     function test_SwapWithZeroAmount() public {
         vm.prank(user);
         vm.expectRevert();
-        swapV3.swap(
-            address(inputToken),
-            address(outputToken),
-            0,
-            address(gasToken),
-            GAS_FEE
-        );
+        swapV3.swap(address(inputToken), address(outputToken), 0, address(gasToken), GAS_FEE);
     }
 
     function test_SwapWithZeroGasFee() public {
@@ -135,13 +123,7 @@ contract SwapV3Test is Test {
         uint256 expectedOutput = AMOUNT; // 1:1 swap with no gas fee deduction
 
         vm.prank(user);
-        uint256 amountOut = swapV3.swap(
-            address(inputToken),
-            address(outputToken),
-            AMOUNT,
-            address(gasToken),
-            0
-        );
+        uint256 amountOut = swapV3.swap(address(inputToken), address(outputToken), AMOUNT, address(gasToken), 0);
 
         assertEq(amountOut, expectedOutput, "Incorrect output amount");
         assertEq(inputToken.balanceOf(user), initialBalance - AMOUNT, "Input tokens not transferred from user");
@@ -149,4 +131,4 @@ contract SwapV3Test is Test {
         assertEq(outputToken.balanceOf(user), expectedOutput, "Output tokens not received by user");
         assertEq(gasToken.balanceOf(address(swapV3)), 0, "Gas tokens should not be received");
     }
-} 
+}

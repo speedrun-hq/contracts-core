@@ -21,13 +21,10 @@ contract SwapV2 is ISwap {
         wzeta = _wzeta;
     }
 
-    function swap(
-        address tokenIn,
-        address tokenOut,
-        uint256 amountIn,
-        address gasZRC20,
-        uint256 gasFee
-    ) public returns (uint256 amountOut) {
+    function swap(address tokenIn, address tokenOut, uint256 amountIn, address gasZRC20, uint256 gasFee)
+        public
+        returns (uint256 amountOut)
+    {
         // Transfer tokens from sender to this contract
         IERC20(tokenIn).safeTransferFrom(msg.sender, address(this), amountIn);
 
@@ -80,4 +77,4 @@ contract SwapV2 is ISwap {
         // Transfer output tokens to sender
         IERC20(tokenOut).safeTransfer(msg.sender, amountOut);
     }
-} 
+}

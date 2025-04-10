@@ -14,4 +14,4 @@ contract MockWETH is ERC20 {
         _burn(msg.sender, amount);
         payable(msg.sender).transfer(amount);
     }
-} 
+}

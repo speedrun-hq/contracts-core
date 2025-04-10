@@ -33,4 +33,4 @@ contract AddTokenAssociationScript is Script {
 
         vm.stopBroadcast();
     }
-} 
+}

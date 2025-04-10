@@ -20,17 +20,10 @@ contract IntentScript is Script {
         Intent implementation = new Intent();
 
         // Prepare initialization data
-        bytes memory initData = abi.encodeWithSelector(
-            Intent.initialize.selector,
-            gateway,
-            router
-        );
+        bytes memory initData = abi.encodeWithSelector(Intent.initialize.selector, gateway, router);
 
         // Deploy proxy
-        ERC1967Proxy proxy = new ERC1967Proxy(
-            address(implementation),
-            initData
-        );
+        ERC1967Proxy proxy = new ERC1967Proxy(address(implementation), initData);
 
         Intent intent = Intent(address(proxy));
 
@@ -43,4 +36,4 @@ contract IntentScript is Script {
 
         vm.stopBroadcast();
     }
-} 
+}

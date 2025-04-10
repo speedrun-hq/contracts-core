@@ -9,14 +9,14 @@ contract IntentImplementationScript is Script {
 
     function run() public {
         uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
-        
+
         vm.startBroadcast(deployerPrivateKey);
 
         // Deploy only the implementation contract
         Intent implementation = new Intent();
-        
+
         console2.log("Intent implementation deployed to:", address(implementation));
-        
+
         vm.stopBroadcast();
     }
-} 
+}

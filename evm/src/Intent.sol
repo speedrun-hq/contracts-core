@@ -16,7 +16,7 @@ import "./utils/PayloadUtils.sol";
 contract Intent is Initializable, UUPSUpgradeable, AccessControlUpgradeable, PausableUpgradeable {
     // Role definitions
     bytes32 public constant PAUSER_ROLE = keccak256("PAUSER_ROLE");
-    
+
     // Counter for generating unique intent IDs
     uint256 public intentCounter;
 
@@ -57,12 +57,7 @@ contract Intent is Initializable, UUPSUpgradeable, AccessControlUpgradeable, Pau
     );
 
     // Event emitted when an intent is fulfilled
-    event IntentFulfilled(
-        bytes32 indexed intentId,
-        address indexed asset,
-        uint256 amount,
-        address indexed receiver
-    );
+    event IntentFulfilled(bytes32 indexed intentId, address indexed asset, uint256 amount, address indexed receiver);
 
     // Event emitted when an intent is settled
     event IntentSettled(
@@ -111,11 +106,11 @@ contract Intent is Initializable, UUPSUpgradeable, AccessControlUpgradeable, Pau
         __AccessControl_init();
         __UUPSUpgradeable_init();
         __Pausable_init();
-        
+
         // Set up admin role
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
         _grantRole(PAUSER_ROLE, msg.sender);
-        
+
         gateway = _gateway;
         router = _router;
     }
@@ -129,11 +124,7 @@ contract Intent is Initializable, UUPSUpgradeable, AccessControlUpgradeable, Pau
      * @param chainId The chain ID where the intent is being initiated
      * @return The computed intent ID
      */
-    function computeIntentId(
-        uint256 counter,
-        uint256 salt,
-        uint256 chainId
-    ) public pure returns (bytes32) {
+    function computeIntentId(uint256 counter, uint256 salt, uint256 chainId) public pure returns (bytes32) {
         return keccak256(abi.encodePacked(counter, salt, chainId));
     }
 
@@ -154,18 +145,12 @@ contract Intent is Initializable, UUPSUpgradeable, AccessControlUpgradeable, Pau
      * @param receiver Receiver address
      * @return The computed fulfillment index
      */
-    function getFulfillmentIndex(
-        bytes32 intentId,
-        address asset,
-        uint256 amount,
-        address receiver
-    ) public pure returns (bytes32) {
-        return PayloadUtils.computeFulfillmentIndex(
-            intentId,
-            asset,
-            amount,
-            receiver
-        );
+    function getFulfillmentIndex(bytes32 intentId, address asset, uint256 amount, address receiver)
+        public
+        pure
+        returns (bytes32)
+    {
+        return PayloadUtils.computeFulfillmentIndex(intentId, asset, amount, receiver);
     }
 
     /**
@@ -197,18 +182,12 @@ contract Intent is Initializable, UUPSUpgradeable, AccessControlUpgradeable, Pau
 
         // Generate intent ID using the computeIntentId function with current chain ID
         bytes32 intentId = computeIntentId(intentCounter, salt, block.chainid);
-        
+
         // Increment counter
         intentCounter++;
 
         // Create payload for crosschain transaction
-        bytes memory payload = PayloadUtils.encodeIntentPayload(
-            intentId,
-            amount,
-            tip,
-            targetChain,
-            receiver
-        );
+        bytes memory payload = PayloadUtils.encodeIntentPayload(intentId, amount, tip, targetChain, receiver);
 
         // Create revert options
         IGateway.RevertOptions memory revertOptions = IGateway.RevertOptions({
@@ -229,15 +208,7 @@ contract Intent is Initializable, UUPSUpgradeable, AccessControlUpgradeable, Pau
         );
 
         // Emit event
-        emit IntentInitiated(
-            intentId,
-            asset,
-            amount,
-            targetChain,
-            receiver,
-            tip,
-            salt
-        );
+        emit IntentInitiated(intentId, asset, amount, targetChain, receiver, tip, salt);
 
         return intentId;
     }
@@ -249,19 +220,9 @@ contract Intent is Initializable, UUPSUpgradeable, AccessControlUpgradeable, Pau
      * @param amount Amount to transfer
      * @param receiver Receiver address
      */
-    function fulfill(
-        bytes32 intentId,
-        address asset,
-        uint256 amount,
-        address receiver
-    ) external whenNotPaused {
+    function fulfill(bytes32 intentId, address asset, uint256 amount, address receiver) external whenNotPaused {
         // Compute the fulfillment index
-        bytes32 fulfillmentIndex = PayloadUtils.computeFulfillmentIndex(
-            intentId,
-            asset,
-            amount,
-            receiver
-        );
+        bytes32 fulfillmentIndex = PayloadUtils.computeFulfillmentIndex(intentId, asset, amount, receiver);
 
         // Check if intent is already fulfilled with these parameters
         require(fulfillments[fulfillmentIndex] == address(0), "Intent already fulfilled with these parameters");
@@ -276,12 +237,7 @@ contract Intent is Initializable, UUPSUpgradeable, AccessControlUpgradeable, Pau
         fulfillments[fulfillmentIndex] = msg.sender;
 
         // Emit event
-        emit IntentFulfilled(
-            intentId,
-            asset,
-            amount,
-            receiver
-        );
+        emit IntentFulfilled(intentId, asset, amount, receiver);
     }
 
     /**
@@ -303,12 +259,7 @@ contract Intent is Initializable, UUPSUpgradeable, AccessControlUpgradeable, Pau
         uint256 actualAmount
     ) internal returns (bool) {
         // Compute the fulfillment index using the original amount
-        bytes32 fulfillmentIndex = PayloadUtils.computeFulfillmentIndex(
-            intentId,
-            asset,
-            amount,
-            receiver
-        );
+        bytes32 fulfillmentIndex = PayloadUtils.computeFulfillmentIndex(intentId, asset, amount, receiver);
 
         // Check if intent has already been settled
         require(!settlements[fulfillmentIndex].settled, "Intent already settled");
@@ -337,16 +288,7 @@ contract Intent is Initializable, UUPSUpgradeable, AccessControlUpgradeable, Pau
         }
 
         // Emit the IntentSettled event
-        emit IntentSettled(
-            intentId,
-            asset,
-            amount,
-            receiver,
-            fulfilled,
-            fulfiller,
-            actualAmount,
-            paidTip
-        );
+        emit IntentSettled(intentId, asset, amount, receiver, fulfilled, fulfiller, actualAmount, paidTip);
 
         return fulfilled;
     }
@@ -357,7 +299,12 @@ contract Intent is Initializable, UUPSUpgradeable, AccessControlUpgradeable, Pau
      * @param message Encoded settlement payload
      * @return Empty bytes array
      */
-    function onCall(MessageContext calldata context, bytes calldata message) external payable onlyGateway returns (bytes memory) {
+    function onCall(MessageContext calldata context, bytes calldata message)
+        external
+        payable
+        onlyGateway
+        returns (bytes memory)
+    {
         // Verify sender is the router
         require(context.sender == router, "Invalid sender");
 
@@ -369,14 +316,7 @@ contract Intent is Initializable, UUPSUpgradeable, AccessControlUpgradeable, Pau
         IERC20(payload.asset).transferFrom(gateway, address(this), totalTransfer);
 
         // Settle the intent
-        _settle(
-            payload.intentId,
-            payload.asset,
-            payload.amount,
-            payload.receiver,
-            payload.tip,
-            payload.actualAmount
-        );
+        _settle(payload.intentId, payload.asset, payload.amount, payload.receiver, payload.tip, payload.actualAmount);
 
         return "";
     }
@@ -402,4 +342,4 @@ contract Intent is Initializable, UUPSUpgradeable, AccessControlUpgradeable, Pau
         router = _router;
         emit RouterUpdated(oldRouter, _router);
     }
-} 
+}

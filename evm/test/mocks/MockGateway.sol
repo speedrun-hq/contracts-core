@@ -27,13 +27,8 @@ contract MockGateway is IGateway {
         IERC20(asset).transferFrom(msg.sender, address(this), amount);
 
         // Store the call data
-        lastCall = CallData({
-            receiver: receiver,
-            amount: amount,
-            asset: asset,
-            payload: payload,
-            revertOptions: revertOptions
-        });
+        lastCall =
+            CallData({receiver: receiver, amount: amount, asset: asset, payload: payload, revertOptions: revertOptions});
     }
 
     function withdrawAndCall(
@@ -46,4 +41,4 @@ contract MockGateway is IGateway {
     ) external override {
         // Mock implementation - do nothing
     }
-} 
+}

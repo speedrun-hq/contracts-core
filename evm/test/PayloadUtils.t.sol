@@ -17,13 +17,7 @@ contract PayloadUtilsTest is Test {
         bytes memory receiverBytes = abi.encodePacked(receiver);
 
         // Encode intent payload
-        bytes memory encoded = PayloadUtils.encodeIntentPayload(
-            intentId,
-            amount,
-            tip,
-            targetChain,
-            receiverBytes
-        );
+        bytes memory encoded = PayloadUtils.encodeIntentPayload(intentId, amount, tip, targetChain, receiverBytes);
 
         // Decode intent payload
         PayloadUtils.IntentPayload memory decoded = PayloadUtils.decodeIntentPayload(encoded);
@@ -45,13 +39,7 @@ contract PayloadUtilsTest is Test {
         bytes memory receiverBytes = new bytes(20); // all zeros address
 
         // Encode intent payload
-        bytes memory encoded = PayloadUtils.encodeIntentPayload(
-            intentId,
-            amount,
-            tip,
-            targetChain,
-            receiverBytes
-        );
+        bytes memory encoded = PayloadUtils.encodeIntentPayload(intentId, amount, tip, targetChain, receiverBytes);
 
         // Decode intent payload
         PayloadUtils.IntentPayload memory decoded = PayloadUtils.decodeIntentPayload(encoded);
@@ -74,13 +62,7 @@ contract PayloadUtilsTest is Test {
         bytes memory receiverBytes = abi.encodePacked(receiver);
 
         // Encode intent payload
-        bytes memory encoded = PayloadUtils.encodeIntentPayload(
-            intentId,
-            amount,
-            tip,
-            targetChain,
-            receiverBytes
-        );
+        bytes memory encoded = PayloadUtils.encodeIntentPayload(intentId, amount, tip, targetChain, receiverBytes);
 
         // Decode intent payload
         PayloadUtils.IntentPayload memory decoded = PayloadUtils.decodeIntentPayload(encoded);
@@ -103,14 +85,8 @@ contract PayloadUtilsTest is Test {
         uint256 actualAmount = 95 ether;
 
         // Encode settlement payload
-        bytes memory encoded = PayloadUtils.encodeSettlementPayload(
-            intentId,
-            amount,
-            asset,
-            receiver,
-            tip,
-            actualAmount
-        );
+        bytes memory encoded =
+            PayloadUtils.encodeSettlementPayload(intentId, amount, asset, receiver, tip, actualAmount);
 
         // Decode settlement payload
         PayloadUtils.SettlementPayload memory decoded = PayloadUtils.decodeSettlementPayload(encoded);
@@ -134,14 +110,8 @@ contract PayloadUtilsTest is Test {
         uint256 actualAmount = 0;
 
         // Encode settlement payload
-        bytes memory encoded = PayloadUtils.encodeSettlementPayload(
-            intentId,
-            amount,
-            asset,
-            receiver,
-            tip,
-            actualAmount
-        );
+        bytes memory encoded =
+            PayloadUtils.encodeSettlementPayload(intentId, amount, asset, receiver, tip, actualAmount);
 
         // Decode settlement payload
         PayloadUtils.SettlementPayload memory decoded = PayloadUtils.decodeSettlementPayload(encoded);
@@ -165,14 +135,8 @@ contract PayloadUtilsTest is Test {
         uint256 actualAmount = type(uint256).max - 2;
 
         // Encode settlement payload
-        bytes memory encoded = PayloadUtils.encodeSettlementPayload(
-            intentId,
-            amount,
-            asset,
-            receiver,
-            tip,
-            actualAmount
-        );
+        bytes memory encoded =
+            PayloadUtils.encodeSettlementPayload(intentId, amount, asset, receiver, tip, actualAmount);
 
         // Decode settlement payload
         PayloadUtils.SettlementPayload memory decoded = PayloadUtils.decodeSettlementPayload(encoded);
@@ -191,7 +155,7 @@ contract PayloadUtilsTest is Test {
         address expected = makeAddr("recipient");
         bytes memory addressBytes = abi.encodePacked(expected);
         address result = PayloadUtils.bytesToAddress(addressBytes);
-        
+
         assertEq(result, expected, "Address conversion failed");
     }
 
@@ -200,14 +164,14 @@ contract PayloadUtilsTest is Test {
         address expected = makeAddr("recipient");
         bytes memory extraData = abi.encodePacked(expected, "extra data that should be ignored");
         address result = PayloadUtils.bytesToAddress(extraData);
-        
+
         assertEq(result, expected, "Address conversion with extra data failed");
     }
 
     function test_BytesToAddress_TooSmall() public {
         // Test with data smaller than 20 bytes
         bytes memory tooSmall = new bytes(10); // Create a 10-byte array
-        
+
         // Use try/catch to verify revert
         bool reverted = false;
         try this.callBytesToAddress(tooSmall) {
@@ -220,10 +184,10 @@ contract PayloadUtilsTest is Test {
             // Should not reach here
             fail();
         }
-        
+
         assertTrue(reverted, "Function should have reverted");
     }
-    
+
     // Helper function to call bytesToAddress externally
     function callBytesToAddress(bytes memory data) external pure returns (address) {
         return PayloadUtils.bytesToAddress(data);
@@ -235,21 +199,11 @@ contract PayloadUtilsTest is Test {
         address asset = makeAddr("asset");
         uint256 amount = 1000 ether;
         address receiver = makeAddr("receiver");
-        
-        bytes32 index = PayloadUtils.computeFulfillmentIndex(
-            intentId,
-            asset,
-            amount,
-            receiver
-        );
-        
-        bytes32 expected = keccak256(abi.encodePacked(
-            intentId,
-            asset,
-            amount,
-            receiver
-        ));
-        
+
+        bytes32 index = PayloadUtils.computeFulfillmentIndex(intentId, asset, amount, receiver);
+
+        bytes32 expected = keccak256(abi.encodePacked(intentId, asset, amount, receiver));
+
         assertEq(index, expected, "Fulfillment index computation failed");
     }
 
@@ -260,48 +214,23 @@ contract PayloadUtilsTest is Test {
         address asset = makeAddr("asset");
         uint256 amount = 1000 ether;
         address receiver = makeAddr("receiver");
-        
-        bytes32 index1 = PayloadUtils.computeFulfillmentIndex(
-            intentId1,
-            asset,
-            amount,
-            receiver
-        );
-        
-        bytes32 index2 = PayloadUtils.computeFulfillmentIndex(
-            intentId2,
-            asset,
-            amount,
-            receiver
-        );
-        
+
+        bytes32 index1 = PayloadUtils.computeFulfillmentIndex(intentId1, asset, amount, receiver);
+
+        bytes32 index2 = PayloadUtils.computeFulfillmentIndex(intentId2, asset, amount, receiver);
+
         assertFalse(index1 == index2, "Indices should be different for different intent IDs");
-        
-        bytes32 index3 = PayloadUtils.computeFulfillmentIndex(
-            intentId1,
-            makeAddr("different-asset"),
-            amount,
-            receiver
-        );
-        
+
+        bytes32 index3 = PayloadUtils.computeFulfillmentIndex(intentId1, makeAddr("different-asset"), amount, receiver);
+
         assertFalse(index1 == index3, "Indices should be different for different assets");
-        
-        bytes32 index4 = PayloadUtils.computeFulfillmentIndex(
-            intentId1,
-            asset,
-            amount + 1,
-            receiver
-        );
-        
+
+        bytes32 index4 = PayloadUtils.computeFulfillmentIndex(intentId1, asset, amount + 1, receiver);
+
         assertFalse(index1 == index4, "Indices should be different for different amounts");
-        
-        bytes32 index5 = PayloadUtils.computeFulfillmentIndex(
-            intentId1,
-            asset,
-            amount,
-            makeAddr("different-receiver")
-        );
-        
+
+        bytes32 index5 = PayloadUtils.computeFulfillmentIndex(intentId1, asset, amount, makeAddr("different-receiver"));
+
         assertFalse(index1 == index5, "Indices should be different for different receivers");
     }
-} 
+}

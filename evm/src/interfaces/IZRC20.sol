@@ -9,10 +9,10 @@ interface IZRC20 {
      * @return gasFee The amount of gas fee to pay
      */
     function withdrawGasFeeWithGasLimit(uint256 gasLimit) external view returns (address gasZRC20, uint256 gasFee);
-    
+
     /**
      * @dev Returns the number of decimals used by the token
      * @return The number of decimals (e.g., 6 for USDC, 18 for most tokens)
      */
     function decimals() external view returns (uint8);
-} 
+}
