@@ -165,15 +165,15 @@ contract Router is Initializable, UUPSUpgradeable, AccessControlUpgradeable, Pau
 
         // If destination has more decimals, multiply
         if (decimalsOut > decimalsIn) {
-            uint256 factor = 10 ** (decimalsOut - decimalsIn);
-            return amountIn * factor;
+            uint256 scalingFactor = 10 ** (decimalsOut - decimalsIn);
+            return amountIn * scalingFactor;
         }
 
         // If destination has fewer decimals, divide
-        uint256 factor = 10 ** (decimalsIn - decimalsOut);
+        uint256 divisor = 10 ** (decimalsIn - decimalsOut);
 
         // Round down by default (matches typical token behavior)
-        return amountIn / factor;
+        return amountIn / divisor;
     }
 
     modifier onlyGateway() {
@@ -201,8 +201,7 @@ contract Router is Initializable, UUPSUpgradeable, AccessControlUpgradeable, Pau
         PayloadUtils.IntentPayload memory intentPayload = PayloadUtils.decodeIntentPayload(payload);
 
         // Get token association for target chain
-        (address targetAsset, address targetZRC20, uint256 chainIdValue) =
-            getTokenAssociation(zrc20, intentPayload.targetChain);
+        (address targetAsset, address targetZRC20,) = getTokenAssociation(zrc20, intentPayload.targetChain);
 
         // Get intent contract on target chain
         address intentContract = intentContracts[intentPayload.targetChain];
@@ -213,9 +212,8 @@ contract Router is Initializable, UUPSUpgradeable, AccessControlUpgradeable, Pau
         uint8 targetDecimals = IZRC20(targetZRC20).decimals();
 
         // Convert amounts to target token decimal representation
-        (uint256 wantedAmount, uint256 wantedTip, uint256 wantedAmountWithTip) = _convertAmountsForDecimals(
-            intentPayload.amount, intentPayload.tip, amountWithTip, sourceDecimals, targetDecimals
-        );
+        (uint256 wantedAmount, uint256 wantedTip, uint256 wantedAmountWithTip) =
+            _convertAmountsForDecimals(intentPayload.amount, amountWithTip, sourceDecimals, targetDecimals);
 
         // Get gas fee info from target ZRC20
         (address gasZRC20, uint256 gasFee) = IZRC20(targetZRC20).withdrawGasFeeWithGasLimit(withdrawGasLimit);
@@ -296,7 +294,6 @@ contract Router is Initializable, UUPSUpgradeable, AccessControlUpgradeable, Pau
     /**
      * @dev Helper function to convert amounts between different token decimal representations
      * @param amount The original amount
-     * @param tip The original tip
      * @param amountWithTip The original amount with tip
      * @param sourceDecimals The source token's decimal places
      * @param targetDecimals The target token's decimal places
@@ -306,7 +303,6 @@ contract Router is Initializable, UUPSUpgradeable, AccessControlUpgradeable, Pau
      */
     function _convertAmountsForDecimals(
         uint256 amount,
-        uint256 tip,
         uint256 amountWithTip,
         uint8 sourceDecimals,
         uint8 targetDecimals

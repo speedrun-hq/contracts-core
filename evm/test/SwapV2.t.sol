@@ -22,10 +22,10 @@ contract MockERC20 is ERC20 {
 contract MockUniswapV2Router is IUniswapV2Router02 {
     function swapExactTokensForTokens(
         uint256 amountIn,
-        uint256 amountOutMin,
+        uint256, /*amountOutMin*/
         address[] calldata path,
         address to,
-        uint256 deadline
+        uint256 /*deadline*/
     ) external returns (uint256[] memory amounts) {
         // Mock 1:1 swap for testing
         IERC20(path[0]).transferFrom(msg.sender, address(this), amountIn);
@@ -38,10 +38,10 @@ contract MockUniswapV2Router is IUniswapV2Router02 {
 
     function swapTokensForExactTokens(
         uint256 amountOut,
-        uint256 amountInMax,
+        uint256, /*amountInMax*/
         address[] calldata path,
         address to,
-        uint256 deadline
+        uint256 /*deadline*/
     ) external returns (uint256[] memory amounts) {
         // Mock 1:1 swap for testing
         IERC20(path[0]).transferFrom(msg.sender, address(this), amountOut);
@@ -52,41 +52,39 @@ contract MockUniswapV2Router is IUniswapV2Router02 {
         amounts[1] = amountOut;
     }
 
-    function swapExactETHForTokens(uint256 amountOutMin, address[] calldata path, address to, uint256 deadline)
+    function swapExactETHForTokens(uint256, address[] calldata, address, uint256)
         external
         payable
-        returns (uint256[] memory amounts)
+        returns (uint256[] memory)
     {
         // Not used in tests
         revert("Not implemented");
     }
 
     function swapTokensForExactETH(
-        uint256 amountOut,
-        uint256 amountInMax,
-        address[] calldata path,
-        address to,
-        uint256 deadline
-    ) external returns (uint256[] memory amounts) {
+        uint256, /*amountOut*/
+        uint256, /*amountInMax*/
+        address[] calldata, /*path*/
+        address, /*to*/
+        uint256 /*deadline*/
+    ) external pure returns (uint256[] memory) {
         // Not used in tests
         revert("Not implemented");
     }
 
-    function swapExactTokensForETH(
-        uint256 amountIn,
-        uint256 amountOutMin,
-        address[] calldata path,
-        address to,
-        uint256 deadline
-    ) external returns (uint256[] memory amounts) {
+    function swapExactTokensForETH(uint256, uint256, address[] calldata, address, uint256)
+        external
+        pure
+        returns (uint256[] memory)
+    {
         // Not used in tests
         revert("Not implemented");
     }
 
-    function swapETHForExactTokens(uint256 amountOut, address[] calldata path, address to, uint256 deadline)
+    function swapETHForExactTokens(uint256, address[] calldata, address, uint256)
         external
         payable
-        returns (uint256[] memory amounts)
+        returns (uint256[] memory)
     {
         // Not used in tests
         revert("Not implemented");

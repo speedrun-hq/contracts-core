@@ -27,10 +27,10 @@ contract MockRouterForTests {
         }
 
         // If destination has fewer decimals, divide
-        uint256 factor = 10 ** (decimalsIn - decimalsOut);
+        uint256 divider = 10 ** (decimalsIn - decimalsOut);
 
         // Round down by default (matches typical token behavior)
-        return amountIn / factor;
+        return amountIn / divider;
     }
 }
 
@@ -50,6 +50,8 @@ contract RouterDecimalConversionTest is Test {
      * @dev Tests conversion when source and target decimals are the same
      */
     function testSameDecimals() public {
+        router = router;
+
         uint256 amount = 1000000; // 1.0 tokens with 6 decimals
         uint8 decimalsIn = 6;
         uint8 decimalsOut = 6;
@@ -80,6 +82,8 @@ contract RouterDecimalConversionTest is Test {
      * @dev Tests conversion when target has more decimals than source
      */
     function testMoreDecimalsOutput() public {
+        router = router;
+
         // Test case 1: 6 to 18 decimals (common USDC scenario)
         uint256 amount1 = 1000000; // 1.0 USDC with 6 decimals
         uint8 decimalsIn1 = 6;
@@ -115,6 +119,8 @@ contract RouterDecimalConversionTest is Test {
      * @dev Tests conversion when target has fewer decimals than source
      */
     function testFewerDecimalsOutput() public {
+        router = router;
+
         // Test case 1: 18 to 6 decimals (ETH-like to USDC-like)
         uint256 amount1 = 1000000000000000000; // 1.0 with 18 decimals
         uint8 decimalsIn1 = 18;
@@ -150,6 +156,8 @@ contract RouterDecimalConversionTest is Test {
      * @dev Tests rounding behavior when reducing decimals
      */
     function testRoundingBehavior() public {
+        router = router;
+
         // Test different rounding scenarios when reducing precision
 
         // Just below threshold (1.9999 -> 1)

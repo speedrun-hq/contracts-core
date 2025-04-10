@@ -132,11 +132,6 @@ contract RouterTest is Test {
         assertEq(router.intentContracts(chainId), user2);
     }
 
-    function test_GetIntentContract_UnsetChainId() public {
-        uint256 chainId = 999;
-        assertEq(router.getIntentContract(chainId), address(0));
-    }
-
     function test_AddToken() public {
         string memory name = "USDC";
         vm.expectEmit(true, false, false, false);
@@ -755,7 +750,6 @@ contract RouterTest is Test {
     function test_OnCall_PausedReverts() public {
         // Setup a minimal test for onCall failing when paused
         uint256 sourceChainId = 1;
-        uint256 targetChainId = 2;
         address sourceIntentContract = makeAddr("sourceIntentContract");
         router.setIntentContract(sourceChainId, sourceIntentContract);
 

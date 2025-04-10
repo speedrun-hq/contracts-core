@@ -78,6 +78,7 @@ contract IntentTest is Test {
     }
 
     function test_Initialization() public {
+        owner = owner;
         assertTrue(intent.hasRole(DEFAULT_ADMIN_ROLE, owner));
         assertTrue(intent.hasRole(PAUSER_ROLE, owner));
         assertEq(intent.gateway(), address(gateway));
@@ -85,6 +86,8 @@ contract IntentTest is Test {
     }
 
     function test_ComputeIntentId() public {
+        owner = owner;
+
         // Test parameters
         uint256 counter = 42;
         uint256 salt = 123;
@@ -100,6 +103,8 @@ contract IntentTest is Test {
     }
 
     function test_ComputeIntentId_Uniqueness() public {
+        owner = owner;
+
         // Different counters
         bytes32 id1 = intent.computeIntentId(1, 100, 1);
         bytes32 id2 = intent.computeIntentId(2, 100, 1);
@@ -157,6 +162,8 @@ contract IntentTest is Test {
     }
 
     function test_GetFulfillmentIndex() public {
+        owner = owner;
+
         // Test parameters
         bytes32 intentId = bytes32(uint256(123));
         address asset = address(token);
@@ -217,13 +224,7 @@ contract IntentTest is Test {
         assertEq(token.balanceOf(address(gateway)), amount + tip);
 
         // Verify gateway call data
-        (
-            address callReceiver,
-            uint256 callAmount,
-            address callAsset,
-            bytes memory callPayload,
-            IGateway.RevertOptions memory callRevertOptions
-        ) = gateway.lastCall();
+        (address callReceiver, uint256 callAmount, address callAsset, bytes memory callPayload,) = gateway.lastCall();
         assertEq(callReceiver, router);
         assertEq(callAmount, amount + tip);
         assertEq(callAsset, address(token));

@@ -92,7 +92,7 @@ The Speedrun protocol uses role-based access control for administrative function
 
 | Role | Function | Description |
 |------|----------|-------------|
-| `DEFAULT_ADMIN_ROLE` | `_authorizeUpgrade` | Authorizes contract upgrades (UUPS pattern) |
+| `DEFAULT_ADMIN_ROLE` | `upgradeToAndCall` | Upgrade implementation contract (UUPS pattern) |
 | `DEFAULT_ADMIN_ROLE` | `unpause` | Unpauses the contract operations |
 | `DEFAULT_ADMIN_ROLE` | `updateGateway` | Updates the gateway contract address |
 | `DEFAULT_ADMIN_ROLE` | `updateRouter` | Updates the router contract address on ZetaChain |
@@ -102,7 +102,7 @@ The Speedrun protocol uses role-based access control for administrative function
 
 | Role | Function | Description |
 |------|----------|-------------|
-| `DEFAULT_ADMIN_ROLE` | `_authorizeUpgrade` | Authorizes contract upgrades (UUPS pattern) |
+| `DEFAULT_ADMIN_ROLE` | `upgradeToAndCall` | Upgrade implementation contract (UUPS pattern) |
 | `DEFAULT_ADMIN_ROLE` | `unpause` | Unpauses the contract operations |
 | `DEFAULT_ADMIN_ROLE` | `updateGateway` | Updates the gateway contract address |
 | `DEFAULT_ADMIN_ROLE` | `updateSwapModule` | Updates the swap module address |

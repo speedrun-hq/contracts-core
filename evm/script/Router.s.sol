@@ -16,7 +16,6 @@ contract RouterScript is Script {
 
     function run() public {
         uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
-        address deployer = vm.addr(deployerPrivateKey);
 
         // Get environment variables
         address gateway = vm.envAddress("GATEWAY_ADDRESS");
