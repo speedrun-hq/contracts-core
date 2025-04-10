@@ -10,10 +10,10 @@ import "../../src/interfaces/ICurveRegistry.sol";
 contract MockCurveRegistry {
     // Mapping for pools by token pair
     mapping(address => mapping(address => address)) private poolsForCoins;
-    
+
     // Mapping for coin indices in pools
     mapping(address => mapping(address => mapping(address => int128))) private coinIndices;
-    
+
     /**
      * @dev Set a pool for a token pair
      * @param tokenA The first token address
@@ -24,7 +24,7 @@ contract MockCurveRegistry {
         poolsForCoins[tokenA][tokenB] = pool;
         poolsForCoins[tokenB][tokenA] = pool; // Set for both directions
     }
-    
+
     /**
      * @dev Set coin indices for a pool
      * @param pool The pool address
@@ -37,7 +37,7 @@ contract MockCurveRegistry {
         coinIndices[pool][tokenA][tokenB] = indexA;
         coinIndices[pool][tokenB][tokenA] = indexB;
     }
-    
+
     /**
      * @dev Find the best pool for exchanging two tokens
      * @param from The address of the input token
@@ -47,7 +47,7 @@ contract MockCurveRegistry {
     function find_pool_for_coins(address from, address to) external view returns (address) {
         return poolsForCoins[from][to];
     }
-    
+
     /**
      * @dev Find the best pool for exchanging two tokens with a custom index
      * @param from The address of the input token
@@ -61,7 +61,7 @@ contract MockCurveRegistry {
         }
         return poolsForCoins[from][to];
     }
-    
+
     /**
      * @dev Get the index of a coin within a pool
      * @param pool The address of the pool
@@ -72,4 +72,4 @@ contract MockCurveRegistry {
     function get_coin_indices(address pool, address from, address to) external view returns (int128, int128) {
         return (coinIndices[pool][from][to], coinIndices[pool][to][from]);
     }
-} 
+}
