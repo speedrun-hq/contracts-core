@@ -291,7 +291,7 @@ contract SwapAlgebra is ISwap {
      * @param amount0Delta The change in token0 balance
      * @param amount1Delta The change in token1 balance
      */
-    function algebraSwapCallback(int256 amount0Delta, int256 amount1Delta, bytes calldata /*data*/) external {
+    function algebraSwapCallback(int256 amount0Delta, int256 amount1Delta, bytes calldata /*data*/ ) external {
         // Ensure the caller is a pool
         require(
             algebraFactory.poolByPair(IAlgebraPool(msg.sender).token0(), IAlgebraPool(msg.sender).token1())
