@@ -4,6 +4,7 @@ pragma solidity 0.8.26;
 import {Test, console2} from "forge-std/Test.sol";
 import {Router} from "../src/Router.sol";
 import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
+import {UUPSUpgradeable} from "@openzeppelin/contracts/proxy/utils/UUPSUpgradeable.sol";
 import {MockGateway} from "./mocks/MockGateway.sol";
 import {MockToken} from "./mocks/MockToken.sol";
 import {PayloadUtils} from "../src/utils/PayloadUtils.sol";
@@ -41,6 +42,8 @@ contract RouterTest is Test {
         uint256 amount,
         uint256 tip
     );
+    // UUPS upgrade event
+    event Upgraded(address indexed implementation);
 
     // Helper function to create a properly initialized Router
     function createInitializedRouter(address gatewayAddr, address swapModuleAddr) internal returns (Router) {
@@ -686,5 +689,41 @@ contract RouterTest is Test {
         vm.prank(user1);
         expectAccessControlError(user1);
         router.updateGateway(newGateway);
+    }
+    
+    function test_RouterUpgrade() public {
+        // Create a new implementation
+        Router newImplementation = new Router();
+        
+        // Get original gateway and swapModule addresses from current router
+        address originalGateway = router.gateway();
+        address originalSwapModule = router.swapModule();
+        uint256 originalGasLimit = router.withdrawGasLimit();
+        
+        // Upgrade the router to the new implementation
+        vm.expectEmit(true, true, false, false);
+        // Define the Upgraded event directly
+        emit Upgraded(address(newImplementation));
+        router.upgradeToAndCall(address(newImplementation), "");
+        
+        // Verify that storage was preserved after upgrade
+        assertEq(router.gateway(), originalGateway, "Gateway address should be preserved after upgrade");
+        assertEq(router.swapModule(), originalSwapModule, "Swap module address should be preserved after upgrade");
+        assertEq(router.withdrawGasLimit(), originalGasLimit, "Withdraw gas limit should be preserved after upgrade");
+        
+        // Verify that we can still call functions on the upgraded router
+        uint256 newGasLimit = originalGasLimit + 100000;
+        router.setWithdrawGasLimit(newGasLimit);
+        assertEq(router.withdrawGasLimit(), newGasLimit, "Should be able to set new values after upgrade");
+    }
+    
+    function test_RouterUpgrade_OnlyAdminCanUpgrade() public {
+        // Create a new implementation
+        Router newImplementation = new Router();
+        
+        // Attempt to upgrade as non-admin
+        vm.prank(user1);
+        expectAccessControlError(user1);
+        router.upgradeToAndCall(address(newImplementation), "");
     }
 } 
