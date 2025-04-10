@@ -11,6 +11,7 @@ import "./interfaces/IUniswapV3Router.sol";
 import "./interfaces/IGateway.sol";
 import "./interfaces/IZRC20.sol";
 import "./interfaces/ISwap.sol";
+import "./interfaces/IRouter.sol";
 import "./utils/PayloadUtils.sol";
 // import "forge-std/console.sol";
 
@@ -18,7 +19,7 @@ import "./utils/PayloadUtils.sol";
  * @title Router
  * @dev Routes CCTX and handles ZRC20 swaps on ZetaChain
  */
-contract Router is Initializable, UUPSUpgradeable, AccessControlUpgradeable, PausableUpgradeable {
+contract Router is IRouter, Initializable, UUPSUpgradeable, AccessControlUpgradeable, PausableUpgradeable {
     using SafeERC20 for IERC20;
 
     // Role definitions
@@ -176,13 +177,17 @@ contract Router is Initializable, UUPSUpgradeable, AccessControlUpgradeable, Pau
         return amountIn / divisor;
     }
 
-    modifier onlyGateway() {
-        require(msg.sender == gateway, "Only gateway can call this function");
+    modifier onlyGatewayOrIntent() {
+        // Allow calls from gateway or registered intent contracts
+        require(
+            msg.sender == gateway || intentContracts[block.chainid] == msg.sender,
+            "Only gateway or intent contract can call this function"
+        );
         _;
     }
 
     /**
-     * @dev Handles incoming messages from the gateway
+     * @dev Handles incoming messages from the gateway or direct calls from Intent on ZetaChain
      * @param context The message context containing sender and chain information
      * @param zrc20 The ZRC20 token address
      * @param amountWithTip The amount of tokens with tip
@@ -193,8 +198,8 @@ contract Router is Initializable, UUPSUpgradeable, AccessControlUpgradeable, Pau
         address zrc20,
         uint256 amountWithTip,
         bytes calldata payload
-    ) external onlyGateway whenNotPaused {
-        // Verify the call is coming from the intent contract for this chain
+    ) external override onlyGatewayOrIntent whenNotPaused {
+        // Verify the call is coming from a registered intent contract
         require(intentContracts[context.chainID] == context.senderEVM, "Call must be from intent contract");
 
         // Decode intent payload

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.26;
 
-import {Test, console2} from "forge-std/Test.sol";
+import {Test, console2, Vm} from "forge-std/Test.sol";
 import {Router} from "../src/Router.sol";
 import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 import {UUPSUpgradeable} from "@openzeppelin/contracts/proxy/utils/UUPSUpgradeable.sol";
@@ -817,5 +817,93 @@ contract RouterTest is Test {
         vm.prank(user1);
         expectAccessControlError(user1);
         router.upgradeToAndCall(address(newImplementation), "");
+    }
+
+    function test_OnCall_FromZetaChainIntent() public {
+        // Setup intent contract on ZetaChain
+        uint256 zetaChainId = block.chainid; // Using current chain as ZetaChain for this test
+        uint256 targetChainId = 2;
+        address zetaChainIntentContract = makeAddr("zetaChainIntentContract");
+        router.setIntentContract(zetaChainId, zetaChainIntentContract);
+        router.setIntentContract(targetChainId, makeAddr("targetIntentContract"));
+
+        // Setup token associations for both source and target chains
+        string memory tokenName = "USDC";
+        router.addToken(tokenName);
+
+        // Add token association for the source chain (ZetaChain)
+        address sourceAsset = address(inputToken); // Use inputToken as the source asset
+        router.addTokenAssociation(tokenName, zetaChainId, sourceAsset, address(inputToken));
+
+        // Add token association for the target chain
+        address targetAsset = makeAddr("target_asset");
+        router.addTokenAssociation(tokenName, targetChainId, targetAsset, address(targetZRC20));
+
+        // Create intent payload
+        bytes32 intentId = keccak256("zetachain-intent-test");
+        uint256 amount = 100 ether;
+        uint256 tip = 10 ether;
+        bytes memory receiver = abi.encodePacked(user2);
+        bytes memory intentPayloadBytes =
+            PayloadUtils.encodeIntentPayload(intentId, amount, tip, targetChainId, receiver);
+
+        // Mock setup for withdrawGasFeeWithGasLimit
+        uint256 gasFee = 1 ether;
+        vm.mockCall(
+            address(targetZRC20),
+            abi.encodeWithSelector(IZRC20.withdrawGasFeeWithGasLimit.selector, router.withdrawGasLimit()),
+            abi.encode(address(gasZRC20), gasFee)
+        );
+
+        // Mint tokens to make the test work - mint amount + tip to the router
+        inputToken.mint(address(router), amount + tip); // Mint the full amount including tip
+        targetZRC20.mint(address(swapModule), amount + tip); // Mint enough to handle the return transfer
+        gasZRC20.mint(address(swapModule), gasFee);
+
+        // Setup context to simulate call from ZetaChain Intent
+        IGateway.ZetaChainMessageContext memory context = IGateway.ZetaChainMessageContext({
+            chainID: zetaChainId,
+            sender: abi.encodePacked(zetaChainIntentContract),
+            senderEVM: zetaChainIntentContract
+        });
+
+        // Start recording logs to verify events
+        vm.recordLogs();
+
+        // Call onCall as if from the Intent contract on ZetaChain
+        vm.prank(address(gateway));
+        router.onCall(context, address(inputToken), amount + tip, intentPayloadBytes);
+
+        // Verify approval to gateway was made
+        assertTrue(
+            targetZRC20.allowance(address(router), address(gateway)) > 0,
+            "Router should approve target ZRC20 to gateway"
+        );
+        assertTrue(
+            gasZRC20.allowance(address(router), address(gateway)) > 0, "Router should approve gas ZRC20 to gateway"
+        );
+
+        // Verify IntentSettlementForwarded event was emitted with correct parameters
+        Vm.Log[] memory entries = vm.getRecordedLogs();
+        bool foundEvent = false;
+
+        for (uint256 i = 0; i < entries.length; i++) {
+            // The event signature for IntentSettlementForwarded
+            bytes32 eventSig = keccak256("IntentSettlementForwarded(bytes,uint256,uint256,address,uint256,uint256)");
+            if (entries[i].topics[0] == eventSig) {
+                foundEvent = true;
+
+                // Decode the non-indexed parameters
+                (address zrc20, uint256 eventAmount, uint256 eventTip) =
+                    abi.decode(entries[i].data, (address, uint256, uint256));
+
+                // Verify the event parameters
+                assertEq(zrc20, address(inputToken), "ZRC20 address in event doesn't match");
+                assertEq(eventAmount, amount + tip, "Amount in event doesn't match"); // The event reports the total amount including tip
+                assertEq(eventTip, 9 ether, "Tip in event doesn't match"); // Actual tip in the event is 9 ether (1 ether is used for gas)
+            }
+        }
+
+        assertTrue(foundEvent, "IntentSettlementForwarded event not found");
     }
 }

@@ -5,8 +5,10 @@ import {Test, console2} from "forge-std/Test.sol";
 import {Intent} from "../src/Intent.sol";
 import {MockGateway} from "./mocks/MockGateway.sol";
 import {MockERC20} from "./mocks/MockERC20.sol";
+import {MockRouter} from "./mocks/MockRouter.sol";
 import {PayloadUtils} from "../src/utils/PayloadUtils.sol";
 import {IGateway} from "../src/interfaces/IGateway.sol";
+import {IRouter} from "../src/interfaces/IRouter.sol";
 import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 import {IERC20Errors} from "@openzeppelin/contracts/interfaces/draft-IERC6093.sol";
 
@@ -64,8 +66,8 @@ contract IntentTest is Test {
         gateway = new MockGateway();
         token = new MockERC20("Test Token", "TEST");
 
-        // Deploy implementation
-        intentImplementation = new Intent();
+        // Deploy implementation (not on ZetaChain)
+        intentImplementation = new Intent(false);
 
         // Prepare initialization data
         bytes memory initData = abi.encodeWithSelector(Intent.initialize.selector, address(gateway), router);
@@ -75,6 +77,19 @@ contract IntentTest is Test {
         intent = Intent(address(proxy));
 
         // Setup test tokens - We'll mint specific amounts in each test rather than here
+    }
+
+    // Helper to deploy a new intent contract with isZetaChain=true
+    function _deployZetaChainIntent() internal returns (Intent) {
+        // Deploy implementation (on ZetaChain)
+        Intent zetaChainImpl = new Intent(true);
+
+        // Prepare initialization data
+        bytes memory initData = abi.encodeWithSelector(Intent.initialize.selector, address(gateway), router);
+
+        // Deploy proxy
+        ERC1967Proxy proxy = new ERC1967Proxy(address(zetaChainImpl), initData);
+        return Intent(address(proxy));
     }
 
     function test_Initialization() public {
@@ -231,6 +246,92 @@ contract IntentTest is Test {
 
         // Verify payload
         PayloadUtils.IntentPayload memory payload = PayloadUtils.decodeIntentPayload(callPayload);
+        assertEq(payload.intentId, intentId);
+        assertEq(payload.amount, amount);
+        assertEq(payload.tip, tip);
+        assertEq(payload.targetChain, targetChain);
+        assertEq(keccak256(payload.receiver), keccak256(receiver));
+    }
+
+    function test_Initiate_SameChainReverts() public {
+        // Test parameters
+        uint256 amount = 100 ether;
+        uint256 tip = 10 ether;
+        uint256 targetChain = block.chainid; // Same as current chain
+        bytes memory receiver = abi.encodePacked(user2);
+        uint256 salt = 123;
+
+        // Mint tokens for initiate
+        token.mint(user1, amount + tip);
+        vm.prank(user1);
+        token.approve(address(intent), amount + tip);
+
+        // Call initiate and expect revert
+        vm.prank(user1);
+        vm.expectRevert("Target chain cannot be the current chain");
+        intent.initiate(address(token), amount, targetChain, receiver, tip, salt);
+    }
+
+    function test_Initiate_FromZetaChain() public {
+        // Deploy a new intent contract that has isZetaChain=true
+        Intent zetaIntent = _deployZetaChainIntent();
+
+        // Deploy mock router implementation
+        MockRouter mockRouter = new MockRouter();
+
+        // Update the intent contract to use mock router
+        zetaIntent.updateRouter(address(mockRouter));
+
+        // Test parameters
+        uint256 amount = 100 ether;
+        uint256 tip = 10 ether;
+        uint256 targetChain = 1;
+        bytes memory receiver = abi.encodePacked(user2);
+        uint256 salt = 123;
+        uint256 currentChainId = block.chainid;
+
+        // Mint tokens for initiate
+        token.mint(user1, amount + tip);
+
+        // Record user1's balance before
+        uint256 user1BalanceBefore = token.balanceOf(user1);
+
+        vm.prank(user1);
+        token.approve(address(zetaIntent), amount + tip);
+
+        // Expect the IntentInitiated event
+        vm.expectEmit(true, true, false, false);
+        emit IntentInitiated(
+            zetaIntent.computeIntentId(0, salt, currentChainId), // First intent ID with chainId
+            address(token),
+            amount,
+            targetChain,
+            receiver,
+            tip,
+            salt
+        );
+
+        // Call initiate
+        vm.prank(user1);
+        bytes32 intentId = zetaIntent.initiate(address(token), amount, targetChain, receiver, tip, salt);
+
+        // Verify intent ID
+        assertEq(intentId, zetaIntent.computeIntentId(0, salt, currentChainId));
+
+        // Verify tokens were transferred from user1
+        assertEq(token.balanceOf(user1), user1BalanceBefore - (amount + tip));
+
+        // Verify router received the call
+        assertEq(mockRouter.lastZRC20(), address(token));
+        assertEq(mockRouter.lastAmount(), amount + tip);
+
+        // Verify context
+        assertEq(mockRouter.lastContextChainID(), currentChainId);
+        assertEq(mockRouter.lastContextSenderEVM(), address(zetaIntent));
+
+        // Verify payload
+        bytes memory routerPayload = mockRouter.lastPayload();
+        PayloadUtils.IntentPayload memory payload = PayloadUtils.decodeIntentPayload(routerPayload);
         assertEq(payload.intentId, intentId);
         assertEq(payload.amount, amount);
         assertEq(payload.tip, tip);
