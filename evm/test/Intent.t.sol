@@ -11,6 +11,7 @@ import {IGateway} from "../src/interfaces/IGateway.sol";
 import {IRouter} from "../src/interfaces/IRouter.sol";
 import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 import {IERC20Errors} from "@openzeppelin/contracts/interfaces/draft-IERC6093.sol";
+import "../src/interfaces/IIntent.sol";
 
 contract IntentTest is Test {
     Intent public intent;
@@ -514,7 +515,7 @@ contract IntentTest is Test {
 
         // Call onCall through gateway
         vm.prank(address(gateway));
-        intent.onCall(Intent.MessageContext({sender: router}), settlementPayload);
+        intent.onCall(IIntent.MessageContext({sender: router}), settlementPayload);
 
         // Verify settlement record
         bytes32 fulfillmentIndex = PayloadUtils.computeFulfillmentIndex(intentId, address(token), amount, user2);
@@ -566,7 +567,7 @@ contract IntentTest is Test {
 
         // Call onCall through gateway
         vm.prank(address(gateway));
-        intent.onCall(Intent.MessageContext({sender: router}), settlementPayload);
+        intent.onCall(IIntent.MessageContext({sender: router}), settlementPayload);
 
         // Verify settlement record
         bytes32 fulfillmentIndex = PayloadUtils.computeFulfillmentIndex(intentId, address(token), amount, user2);
@@ -615,7 +616,7 @@ contract IntentTest is Test {
         vm.prank(address(gateway));
         vm.expectRevert("Invalid sender");
         intent.onCall(
-            Intent.MessageContext({
+            IIntent.MessageContext({
                 sender: address(0x123) // Invalid sender
             }),
             settlementPayload
@@ -666,7 +667,7 @@ contract IntentTest is Test {
 
         // Call onCall through gateway
         vm.prank(address(gateway));
-        intent.onCall(Intent.MessageContext({sender: router}), settlementPayload);
+        intent.onCall(IIntent.MessageContext({sender: router}), settlementPayload);
 
         // Verify settlement record
         bytes32 fulfillmentIndex = PayloadUtils.computeFulfillmentIndex(
@@ -724,7 +725,7 @@ contract IntentTest is Test {
 
         // Call onCall through gateway to settle the intent
         vm.prank(address(gateway));
-        intent.onCall(Intent.MessageContext({sender: router}), settlementPayload);
+        intent.onCall(IIntent.MessageContext({sender: router}), settlementPayload);
 
         // Verify settlement was recorded
         bytes32 fulfillmentIndex = PayloadUtils.computeFulfillmentIndex(intentId, address(token), amount, user2);
@@ -776,7 +777,7 @@ contract IntentTest is Test {
 
         // Call onCall through gateway to settle the intent the first time
         vm.prank(address(gateway));
-        intent.onCall(Intent.MessageContext({sender: router}), settlementPayload);
+        intent.onCall(IIntent.MessageContext({sender: router}), settlementPayload);
 
         // Verify settlement was recorded
         bytes32 fulfillmentIndex = PayloadUtils.computeFulfillmentIndex(intentId, address(token), amount, user2);
@@ -792,7 +793,7 @@ contract IntentTest is Test {
         // Expect revert with "Intent already settled" error
         vm.prank(address(gateway));
         vm.expectRevert("Intent already settled");
-        intent.onCall(Intent.MessageContext({sender: router}), settlementPayload);
+        intent.onCall(IIntent.MessageContext({sender: router}), settlementPayload);
     }
 
     function test_OnCallEmitsSettlementEvent() public {
@@ -842,7 +843,7 @@ contract IntentTest is Test {
 
         // Call onCall through gateway to settle the intent
         vm.prank(address(gateway));
-        intent.onCall(Intent.MessageContext({sender: router}), settlementPayload);
+        intent.onCall(IIntent.MessageContext({sender: router}), settlementPayload);
 
         // Test case 2: Intent with fulfillment
         // Create another intent
@@ -896,7 +897,7 @@ contract IntentTest is Test {
 
         // Call onCall through gateway to settle the second intent
         vm.prank(address(gateway));
-        intent.onCall(Intent.MessageContext({sender: router}), settlementPayload2);
+        intent.onCall(IIntent.MessageContext({sender: router}), settlementPayload2);
     }
 
     function test_PauseUnpause() public {
@@ -1024,7 +1025,7 @@ contract IntentTest is Test {
 
         // onCall should work even when paused
         vm.prank(address(gateway));
-        intent.onCall(Intent.MessageContext({sender: router}), settlementPayload);
+        intent.onCall(IIntent.MessageContext({sender: router}), settlementPayload);
 
         // Verify settlement record
         bytes32 fulfillmentIndex = PayloadUtils.computeFulfillmentIndex(intentId, address(token), amount, user2);

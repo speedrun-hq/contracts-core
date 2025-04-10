@@ -15,6 +15,7 @@ import {IUniswapV3Router} from "../src/interfaces/IUniswapV3Router.sol";
 import {ISwap} from "../src/interfaces/ISwap.sol";
 import {MockSwapModule} from "./mocks/MockSwapModule.sol";
 import {MockFixedOutputSwapModule} from "./mocks/MockFixedOutputSwapModule.sol";
+import {MockIntent} from "./mocks/MockIntent.sol";
 import "forge-std/console.sol";
 
 contract RouterTest is Test {
@@ -386,8 +387,10 @@ contract RouterTest is Test {
         );
 
         // Mint tokens to make the test work
-        inputToken.mint(address(router), amount);
-        targetZRC20.mint(address(swapModule), amount);
+        // Input token goes to the router
+        inputToken.mint(address(router), amount + tip);
+        // Target token and gas token go to the swap module since they're returned from the swap
+        targetZRC20.mint(address(swapModule), amount + tip);
         gasZRC20.mint(address(swapModule), gasFee);
 
         // Setup context
@@ -399,7 +402,7 @@ contract RouterTest is Test {
 
         // Call onCall
         vm.prank(address(gateway));
-        router.onCall(context, address(inputToken), amount, intentPayloadBytes);
+        router.onCall(context, address(inputToken), amount + tip, intentPayloadBytes);
 
         // Verify approvals were made to the gateway
         assertTrue(
@@ -537,8 +540,10 @@ contract RouterTest is Test {
         // Expected actualAmount = 93 ether (100 - 7)
 
         // Mint tokens to make the test work
-        inputToken.mint(address(router), amount);
-        targetZRC20.mint(address(swapModule), 90 ether); // 90 ether (100 - 8 - 2)
+        // Input token goes to the router
+        inputToken.mint(address(router), amount + tip);
+        // Target token and gas token go to the swap module since they're returned from the swap
+        targetZRC20.mint(address(swapModule), amount + tip);
         gasZRC20.mint(address(swapModule), gasFee);
 
         // Setup context
@@ -556,13 +561,13 @@ contract RouterTest is Test {
             context.chainID,
             targetChainId,
             address(inputToken),
-            amount,
+            amount + tip,
             0 // Tip should be 0 after using it all
         );
 
         // Call onCall
         vm.prank(address(gateway));
-        router.onCall(context, address(inputToken), amount, intentPayloadBytes);
+        router.onCall(context, address(inputToken), amount + tip, intentPayloadBytes);
 
         // Verify approvals to the gateway
         assertTrue(
@@ -855,9 +860,11 @@ contract RouterTest is Test {
             abi.encode(address(gasZRC20), gasFee)
         );
 
-        // Mint tokens to make the test work - mint amount + tip to the router
-        inputToken.mint(address(router), amount + tip); // Mint the full amount including tip
-        targetZRC20.mint(address(swapModule), amount + tip); // Mint enough to handle the return transfer
+        // Mint tokens to make the test work
+        // Input token goes to the router
+        inputToken.mint(address(router), amount + tip);
+        // Target token and gas token go to the swap module since they're returned from the swap
+        targetZRC20.mint(address(swapModule), amount + tip);
         gasZRC20.mint(address(swapModule), gasFee);
 
         // Setup context to simulate call from ZetaChain Intent
@@ -905,5 +912,110 @@ contract RouterTest is Test {
         }
 
         assertTrue(foundEvent, "IntentSettlementForwarded event not found");
+    }
+
+    function test_OnCall_ToZetaChainIntent() public {
+        // Setup intent contract on source chain
+        uint256 sourceChainId = 1;
+        address sourceIntentContract = makeAddr("sourceIntentContract");
+        router.setIntentContract(sourceChainId, sourceIntentContract);
+
+        // Setup intent contract on ZetaChain (current chain)
+        uint256 zetaChainId = block.chainid; // Current chain ID is ZetaChain
+
+        // Deploy a mock Intent contract for ZetaChain
+        MockIntent mockZetaChainIntent = new MockIntent();
+        router.setIntentContract(zetaChainId, address(mockZetaChainIntent));
+
+        // Setup token associations
+        string memory tokenName = "USDC";
+        router.addToken(tokenName);
+        address inputAsset = makeAddr("input_asset");
+        address targetAsset = makeAddr("target_asset");
+
+        // Add token associations for source chain and ZetaChain
+        router.addTokenAssociation(tokenName, sourceChainId, inputAsset, address(inputToken));
+        router.addTokenAssociation(tokenName, zetaChainId, targetAsset, address(targetZRC20));
+
+        // Setup intent payload with ZetaChain as the target
+        bytes32 intentId = keccak256("zetachain-target-test");
+        uint256 amount = 100 ether;
+        uint256 tip = 10 ether;
+        bytes memory receiver = abi.encodePacked(user2);
+
+        bytes memory intentPayloadBytes = PayloadUtils.encodeIntentPayload(intentId, amount, tip, zetaChainId, receiver);
+
+        // Set modest slippage (5%)
+        swapModule.setSlippage(500);
+
+        // Mock setup for IZRC20 withdrawGasFeeWithGasLimit
+        uint256 gasFee = 1 ether;
+        vm.mockCall(
+            address(targetZRC20),
+            abi.encodeWithSelector(IZRC20.withdrawGasFeeWithGasLimit.selector, router.withdrawGasLimit()),
+            abi.encode(address(gasZRC20), gasFee)
+        );
+
+        // Mint tokens to handle all test cases
+        // 1. Input token to the router
+        inputToken.mint(address(router), amount + tip);
+        // 2. Target token to both swap module and router since this test can go either way
+        targetZRC20.mint(address(swapModule), amount + tip);
+        targetZRC20.mint(address(router), amount + tip);
+        // 3. Gas token to both swap module and router
+        gasZRC20.mint(address(swapModule), gasFee);
+        gasZRC20.mint(address(router), gasFee);
+
+        // Setup context for the source chain
+        IGateway.ZetaChainMessageContext memory context = IGateway.ZetaChainMessageContext({
+            chainID: sourceChainId,
+            sender: abi.encodePacked(sourceIntentContract),
+            senderEVM: sourceIntentContract
+        });
+
+        // Start recording logs to verify events
+        vm.recordLogs();
+
+        // Call onCall - this should directly call the Intent contract instead of using the gateway
+        vm.prank(address(gateway));
+        router.onCall(context, address(inputToken), amount + tip, intentPayloadBytes);
+
+        // Verify IntentSettlementForwarded event was emitted
+        Vm.Log[] memory entries = vm.getRecordedLogs();
+        bool foundEvent = false;
+
+        for (uint256 i = 0; i < entries.length; i++) {
+            bytes32 eventSig = keccak256("IntentSettlementForwarded(bytes,uint256,uint256,address,uint256,uint256)");
+            if (entries[i].topics[0] == eventSig) {
+                foundEvent = true;
+
+                // Decode event data
+                (address zrc20, uint256 eventAmount, uint256 eventTip) =
+                    abi.decode(entries[i].data, (address, uint256, uint256));
+
+                // Verify event parameters
+                assertEq(zrc20, address(inputToken), "ZRC20 address in event doesn't match");
+                assertEq(eventAmount, amount + tip, "Amount in event doesn't match");
+                assertEq(eventTip, 3.5 ether, "Tip in event doesn't match"); // 3.5 ether after slippage and gas fee
+            }
+        }
+
+        assertTrue(foundEvent, "IntentSettlementForwarded event not found");
+
+        // Verify the mock Intent contract was called with the settlement payload
+        assertTrue(mockZetaChainIntent.wasCalled(), "Intent contract's onCall was not called");
+        assertEq(mockZetaChainIntent.lastCaller(), address(router), "Intent caller should be the router");
+
+        // Decode the settlement payload to verify its contents
+        PayloadUtils.SettlementPayload memory settlementPayload =
+            PayloadUtils.decodeSettlementPayload(mockZetaChainIntent.lastMessage());
+
+        assertEq(settlementPayload.intentId, intentId, "Intent ID in settlement payload doesn't match");
+        assertEq(settlementPayload.asset, targetAsset, "Asset in settlement payload doesn't match");
+        assertEq(
+            settlementPayload.receiver,
+            PayloadUtils.bytesToAddress(receiver),
+            "Receiver in settlement payload doesn't match"
+        );
     }
 }

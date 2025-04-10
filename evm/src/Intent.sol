@@ -8,13 +8,14 @@ import "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "./interfaces/IGateway.sol";
 import "./interfaces/IRouter.sol";
+import "./interfaces/IIntent.sol";
 import "./utils/PayloadUtils.sol";
 
 /**
  * @title Intent
  * @dev Handles intent-based transfers across chains
  */
-contract Intent is Initializable, UUPSUpgradeable, AccessControlUpgradeable, PausableUpgradeable {
+contract Intent is IIntent, Initializable, UUPSUpgradeable, AccessControlUpgradeable, PausableUpgradeable {
     // Role definitions
     bytes32 public constant PAUSER_ROLE = keccak256("PAUSER_ROLE");
 
@@ -43,11 +44,6 @@ contract Intent is Initializable, UUPSUpgradeable, AccessControlUpgradeable, Pau
 
     // Mapping to track settlements
     mapping(bytes32 => Settlement) public settlements;
-
-    // Struct for message context
-    struct MessageContext {
-        address sender;
-    }
 
     // Event emitted when a new intent is created
     event IntentInitiated(
@@ -102,8 +98,15 @@ contract Intent is Initializable, UUPSUpgradeable, AccessControlUpgradeable, Pau
     }
 
     // Modifier to restrict function access to gateway only
-    modifier onlyGateway() {
-        require(msg.sender == gateway, "Only gateway can call this function");
+    modifier onlyGatewayOrRouter() {
+        if (isZetaChain) {
+            require(
+                msg.sender == gateway || msg.sender == router,
+                "Only gateway or router can call this function on ZetaChain"
+            );
+        } else {
+            require(msg.sender == gateway, "Only gateway can call this function");
+        }
         _;
     }
 
@@ -347,7 +350,7 @@ contract Intent is Initializable, UUPSUpgradeable, AccessControlUpgradeable, Pau
     function onCall(MessageContext calldata context, bytes calldata message)
         external
         payable
-        onlyGateway
+        onlyGatewayOrRouter
         returns (bytes memory)
     {
         // Verify sender is the router
