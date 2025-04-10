@@ -30,7 +30,7 @@ contract MockUniswapV2Router is IUniswapV2Router02 {
         // Mock 1:1 swap for testing
         IERC20(path[0]).transferFrom(msg.sender, address(this), amountIn);
         IERC20(path[1]).transfer(to, amountIn);
-        
+
         amounts = new uint256[](2);
         amounts[0] = amountIn;
         amounts[1] = amountIn;
@@ -46,18 +46,17 @@ contract MockUniswapV2Router is IUniswapV2Router02 {
         // Mock 1:1 swap for testing
         IERC20(path[0]).transferFrom(msg.sender, address(this), amountOut);
         IERC20(path[1]).transfer(to, amountOut);
-        
+
         amounts = new uint256[](2);
         amounts[0] = amountOut;
         amounts[1] = amountOut;
     }
 
-    function swapExactETHForTokens(
-        uint256 amountOutMin,
-        address[] calldata path,
-        address to,
-        uint256 deadline
-    ) external payable returns (uint256[] memory amounts) {
+    function swapExactETHForTokens(uint256 amountOutMin, address[] calldata path, address to, uint256 deadline)
+        external
+        payable
+        returns (uint256[] memory amounts)
+    {
         // Not used in tests
         revert("Not implemented");
     }
@@ -84,12 +83,11 @@ contract MockUniswapV2Router is IUniswapV2Router02 {
         revert("Not implemented");
     }
 
-    function swapETHForExactTokens(
-        uint256 amountOut,
-        address[] calldata path,
-        address to,
-        uint256 deadline
-    ) external payable returns (uint256[] memory amounts) {
+    function swapETHForExactTokens(uint256 amountOut, address[] calldata path, address to, uint256 deadline)
+        external
+        payable
+        returns (uint256[] memory amounts)
+    {
         // Not used in tests
         revert("Not implemented");
     }
@@ -134,13 +132,7 @@ contract SwapV2Test is Test {
         uint256 expectedOutput = AMOUNT - GAS_FEE; // 1:1 swap with gas fee deduction
 
         vm.prank(user);
-        uint256 amountOut = swapV2.swap(
-            address(inputToken),
-            address(outputToken),
-            AMOUNT,
-            address(gasToken),
-            GAS_FEE
-        );
+        uint256 amountOut = swapV2.swap(address(inputToken), address(outputToken), AMOUNT, address(gasToken), GAS_FEE);
 
         assertEq(amountOut, expectedOutput, "Incorrect output amount");
         assertEq(inputToken.balanceOf(user), initialBalance - AMOUNT, "Input tokens not transferred from user");
@@ -152,13 +144,7 @@ contract SwapV2Test is Test {
     function test_SwapWithZeroAmount() public {
         vm.prank(user);
         vm.expectRevert();
-        swapV2.swap(
-            address(inputToken),
-            address(outputToken),
-            0,
-            address(gasToken),
-            GAS_FEE
-        );
+        swapV2.swap(address(inputToken), address(outputToken), 0, address(gasToken), GAS_FEE);
     }
 
     function test_SwapWithZeroGasFee() public {
@@ -166,13 +152,7 @@ contract SwapV2Test is Test {
         uint256 expectedOutput = AMOUNT; // 1:1 swap with no gas fee deduction
 
         vm.prank(user);
-        uint256 amountOut = swapV2.swap(
-            address(inputToken),
-            address(outputToken),
-            AMOUNT,
-            address(gasToken),
-            0
-        );
+        uint256 amountOut = swapV2.swap(address(inputToken), address(outputToken), AMOUNT, address(gasToken), 0);
 
         assertEq(amountOut, expectedOutput, "Incorrect output amount");
         assertEq(inputToken.balanceOf(user), initialBalance - AMOUNT, "Input tokens not transferred from user");
@@ -180,4 +160,4 @@ contract SwapV2Test is Test {
         assertEq(outputToken.balanceOf(user), expectedOutput, "Output tokens not received by user");
         assertEq(gasToken.balanceOf(address(swapV2)), 0, "Gas tokens should not be received");
     }
-} 
+}

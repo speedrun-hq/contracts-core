@@ -24,34 +24,18 @@ library PayloadUtils {
         uint256 targetChain,
         bytes memory receiver
     ) internal pure returns (bytes memory) {
-        return abi.encode(
-            intentId,
-            amount,
-            tip,
-            targetChain,
-            receiver
-        );
+        return abi.encode(intentId, amount, tip, targetChain, receiver);
     }
 
     /**
      * @dev Decodes payload back into intent data
      */
     function decodeIntentPayload(bytes memory payload) internal pure returns (IntentPayload memory) {
-        (
-            bytes32 intentId,
-            uint256 amount,
-            uint256 tip,
-            uint256 targetChain,
-            bytes memory receiver
-        ) = abi.decode(payload, (bytes32, uint256, uint256, uint256, bytes));
+        (bytes32 intentId, uint256 amount, uint256 tip, uint256 targetChain, bytes memory receiver) =
+            abi.decode(payload, (bytes32, uint256, uint256, uint256, bytes));
 
-        return IntentPayload({
-            intentId: intentId,
-            amount: amount,
-            tip: tip,
-            targetChain: targetChain,
-            receiver: receiver
-        });
+        return
+            IntentPayload({intentId: intentId, amount: amount, tip: tip, targetChain: targetChain, receiver: receiver});
     }
 
     /**
@@ -60,21 +44,16 @@ library PayloadUtils {
     struct SettlementPayload {
         // The unique identifier of the intent that initiated the cross-chain transfer
         bytes32 intentId;
-        
         // The original intended amount requested in the intent, used for calculating fulfillment index.
-        // This amount is used to match with pre-existing fulfillments and is NOT necessarily 
+        // This amount is used to match with pre-existing fulfillments and is NOT necessarily
         // the amount that will be transferred.
         uint256 amount;
-        
         // The ERC20 token address on the destination chain
         address asset;
-        
         // The receiver address on the destination chain
         address receiver;
-        
         // The tip amount to be paid to the fulfiller (may be reduced from original tip if it was used to cover costs)
         uint256 tip;
-        
         // The actual amount to be transferred after deducting any fees, slippage, or gas costs
         // This may be lower than the original 'amount' if the tip wasn't sufficient to cover all costs
         uint256 actualAmount;
@@ -91,28 +70,15 @@ library PayloadUtils {
         uint256 tip,
         uint256 actualAmount
     ) internal pure returns (bytes memory) {
-        return abi.encode(
-            intentId,
-            amount,
-            asset,
-            receiver,
-            tip,
-            actualAmount
-        );
+        return abi.encode(intentId, amount, asset, receiver, tip, actualAmount);
     }
 
     /**
      * @dev Decodes settlement payload back into data
      */
     function decodeSettlementPayload(bytes memory payload) internal pure returns (SettlementPayload memory) {
-        (
-            bytes32 intentId,
-            uint256 amount,
-            address asset,
-            address receiver,
-            uint256 tip,
-            uint256 actualAmount
-        ) = abi.decode(payload, (bytes32, uint256, address, address, uint256, uint256));
+        (bytes32 intentId, uint256 amount, address asset, address receiver, uint256 tip, uint256 actualAmount) =
+            abi.decode(payload, (bytes32, uint256, address, address, uint256, uint256));
 
         return SettlementPayload({
             intentId: intentId,
@@ -132,18 +98,12 @@ library PayloadUtils {
      * @param receiver Receiver address
      * @return The computed fulfillment index
      */
-    function computeFulfillmentIndex(
-        bytes32 intentId,
-        address asset,
-        uint256 amount,
-        address receiver
-    ) internal pure returns (bytes32) {
-        return keccak256(abi.encodePacked(
-            intentId,
-            asset,
-            amount,
-            receiver
-        ));
+    function computeFulfillmentIndex(bytes32 intentId, address asset, uint256 amount, address receiver)
+        internal
+        pure
+        returns (bytes32)
+    {
+        return keccak256(abi.encodePacked(intentId, asset, amount, receiver));
     }
 
     /**
@@ -155,4 +115,4 @@ library PayloadUtils {
         require(data.length >= 20, "Invalid address length");
         return address(bytes20(data));
     }
-} 
+}

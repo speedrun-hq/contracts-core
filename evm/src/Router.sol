@@ -27,7 +27,7 @@ contract Router is Initializable, UUPSUpgradeable, AccessControlUpgradeable, Pau
 
     // Default gas limit for withdraw operations
     uint256 private constant DEFAULT_WITHDRAW_GAS_LIMIT = 300000;
-    
+
     // Current gas limit for withdraw operations (can be modified by admin)
     uint256 public withdrawGasLimit;
 
@@ -90,14 +90,14 @@ contract Router is Initializable, UUPSUpgradeable, AccessControlUpgradeable, Pau
         __AccessControl_init();
         __UUPSUpgradeable_init();
         __Pausable_init();
-        
+
         require(_gateway != address(0), "Invalid gateway address");
         require(_swapModule != address(0), "Invalid swap module address");
 
         // Set up admin role
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
         _grantRole(PAUSER_ROLE, msg.sender);
-        
+
         gateway = _gateway;
         swapModule = _swapModule;
         withdrawGasLimit = DEFAULT_WITHDRAW_GAS_LIMIT;
@@ -153,25 +153,25 @@ contract Router is Initializable, UUPSUpgradeable, AccessControlUpgradeable, Pau
      * @param decimalsOut The decimal places of the destination token
      * @return The expected amount with the destination token's decimal precision
      */
-    function calculateExpectedAmount(
-        uint256 amountIn,
-        uint8 decimalsIn,
-        uint8 decimalsOut
-    ) public pure returns (uint256) {
+    function calculateExpectedAmount(uint256 amountIn, uint8 decimalsIn, uint8 decimalsOut)
+        public
+        pure
+        returns (uint256)
+    {
         // If decimals are the same, no conversion needed
         if (decimalsIn == decimalsOut) {
             return amountIn;
         }
-        
+
         // If destination has more decimals, multiply
         if (decimalsOut > decimalsIn) {
             uint256 factor = 10 ** (decimalsOut - decimalsIn);
             return amountIn * factor;
         }
-        
+
         // If destination has fewer decimals, divide
         uint256 factor = 10 ** (decimalsIn - decimalsOut);
-        
+
         // Round down by default (matches typical token behavior)
         return amountIn / factor;
     }
@@ -201,7 +201,8 @@ contract Router is Initializable, UUPSUpgradeable, AccessControlUpgradeable, Pau
         PayloadUtils.IntentPayload memory intentPayload = PayloadUtils.decodeIntentPayload(payload);
 
         // Get token association for target chain
-        (address targetAsset, address targetZRC20, uint256 chainIdValue) = getTokenAssociation(zrc20, intentPayload.targetChain);
+        (address targetAsset, address targetZRC20, uint256 chainIdValue) =
+            getTokenAssociation(zrc20, intentPayload.targetChain);
 
         // Get intent contract on target chain
         address intentContract = intentContracts[intentPayload.targetChain];
@@ -210,16 +211,11 @@ contract Router is Initializable, UUPSUpgradeable, AccessControlUpgradeable, Pau
         // Get decimals for source and target tokens
         uint8 sourceDecimals = IZRC20(zrc20).decimals();
         uint8 targetDecimals = IZRC20(targetZRC20).decimals();
-        
+
         // Convert amounts to target token decimal representation
-        (uint256 wantedAmount, uint256 wantedTip, uint256 wantedAmountWithTip) = 
-            _convertAmountsForDecimals(
-                intentPayload.amount,
-                intentPayload.tip,
-                amountWithTip,
-                sourceDecimals,
-                targetDecimals
-            );
+        (uint256 wantedAmount, uint256 wantedTip, uint256 wantedAmountWithTip) = _convertAmountsForDecimals(
+            intentPayload.amount, intentPayload.tip, amountWithTip, sourceDecimals, targetDecimals
+        );
 
         // Get gas fee info from target ZRC20
         (address gasZRC20, uint256 gasFee) = IZRC20(targetZRC20).withdrawGasFeeWithGasLimit(withdrawGasLimit);
@@ -232,7 +228,7 @@ contract Router is Initializable, UUPSUpgradeable, AccessControlUpgradeable, Pau
 
         // Calculate slippage difference and adjust tip accordingly
         uint256 slippageAndFeeCost = wantedAmountWithTip - amountWithTipOut;
-        
+
         // Initialize tip and actual amount
         uint256 tipAfterSwap;
         uint256 actualAmount = wantedAmount;
@@ -262,14 +258,12 @@ contract Router is Initializable, UUPSUpgradeable, AccessControlUpgradeable, Pau
             targetAsset,
             receiverAddress,
             tipAfterSwap,
-            actualAmount  // actual amount to transfer after all costs
+            actualAmount // actual amount to transfer after all costs
         );
 
         // Prepare call options
-        IGateway.CallOptions memory callOptions = IGateway.CallOptions({
-            gasLimit: withdrawGasLimit,
-            isArbitraryCall: false
-        });
+        IGateway.CallOptions memory callOptions =
+            IGateway.CallOptions({gasLimit: withdrawGasLimit, isArbitraryCall: false});
 
         // Prepare revert options
         IGateway.RevertOptions memory revertOptions = IGateway.RevertOptions({
@@ -295,15 +289,10 @@ contract Router is Initializable, UUPSUpgradeable, AccessControlUpgradeable, Pau
         );
 
         emit IntentSettlementForwarded(
-            context.sender,
-            context.chainID,
-            intentPayload.targetChain,
-            zrc20,
-            amountWithTip,
-            tipAfterSwap
+            context.sender, context.chainID, intentPayload.targetChain, zrc20, amountWithTip, tipAfterSwap
         );
     }
-    
+
     /**
      * @dev Helper function to convert amounts between different token decimal representations
      * @param amount The original amount
@@ -321,15 +310,11 @@ contract Router is Initializable, UUPSUpgradeable, AccessControlUpgradeable, Pau
         uint256 amountWithTip,
         uint8 sourceDecimals,
         uint8 targetDecimals
-    ) private pure returns (
-        uint256 wantedAmount,
-        uint256 wantedTip,
-        uint256 wantedAmountWithTip
-    ) {
+    ) private pure returns (uint256 wantedAmount, uint256 wantedTip, uint256 wantedAmountWithTip) {
         // Convert the individual amount and the total amount with tip
         wantedAmount = calculateExpectedAmount(amount, sourceDecimals, targetDecimals);
         wantedAmountWithTip = calculateExpectedAmount(amountWithTip, sourceDecimals, targetDecimals);
-        
+
         // Calculate tip as the difference to maintain the invariant:
         // wantedAmount + wantedTip == wantedAmountWithTip
         if (wantedAmountWithTip > wantedAmount) {
@@ -340,7 +325,7 @@ contract Router is Initializable, UUPSUpgradeable, AccessControlUpgradeable, Pau
             // Ensure the invariant holds even in edge cases
             wantedAmountWithTip = wantedAmount;
         }
-        
+
         return (wantedAmount, wantedTip, wantedAmountWithTip);
     }
 
@@ -371,7 +356,7 @@ contract Router is Initializable, UUPSUpgradeable, AccessControlUpgradeable, Pau
     function addToken(string calldata name) public onlyRole(DEFAULT_ADMIN_ROLE) {
         require(bytes(name).length > 0, "Token name cannot be empty");
         require(!_supportedTokens[name], "Token already exists");
-        
+
         _supportedTokens[name] = true;
         tokenNames.push(name);
         emit TokenAdded(name);
@@ -384,22 +369,20 @@ contract Router is Initializable, UUPSUpgradeable, AccessControlUpgradeable, Pau
      * @param asset The ERC20 address on the source chain
      * @param zrc20 The ZRC20 address on ZetaChain
      */
-    function addTokenAssociation(
-        string calldata name,
-        uint256 chainId,
-        address asset,
-        address zrc20
-    ) public onlyRole(DEFAULT_ADMIN_ROLE) {
+    function addTokenAssociation(string calldata name, uint256 chainId, address asset, address zrc20)
+        public
+        onlyRole(DEFAULT_ADMIN_ROLE)
+    {
         require(_supportedTokens[name], "Token does not exist");
         require(asset != address(0), "Invalid asset address");
         require(zrc20 != address(0), "Invalid ZRC20 address");
         require(_tokenAssets[name][chainId] == address(0), "Association already exists");
-        
+
         _tokenAssets[name][chainId] = asset;
         _tokenZrc20s[name][chainId] = zrc20;
         _tokenChainIds[name].push(chainId);
         zrc20ToTokenName[zrc20] = name;
-        
+
         emit TokenAssociationAdded(name, chainId, asset, zrc20);
     }
 
@@ -410,21 +393,19 @@ contract Router is Initializable, UUPSUpgradeable, AccessControlUpgradeable, Pau
      * @param asset The new ERC20 address on the source chain
      * @param zrc20 The new ZRC20 address on ZetaChain
      */
-    function updateTokenAssociation(
-        string calldata name,
-        uint256 chainId,
-        address asset,
-        address zrc20
-    ) public onlyRole(DEFAULT_ADMIN_ROLE) {
+    function updateTokenAssociation(string calldata name, uint256 chainId, address asset, address zrc20)
+        public
+        onlyRole(DEFAULT_ADMIN_ROLE)
+    {
         require(_supportedTokens[name], "Token does not exist");
         require(asset != address(0), "Invalid asset address");
         require(zrc20 != address(0), "Invalid ZRC20 address");
         require(_tokenAssets[name][chainId] != address(0), "Association does not exist");
-        
+
         _tokenAssets[name][chainId] = asset;
         _tokenZrc20s[name][chainId] = zrc20;
         zrc20ToTokenName[zrc20] = name;
-        
+
         emit TokenAssociationUpdated(name, chainId, asset, zrc20);
     }
 
@@ -433,16 +414,13 @@ contract Router is Initializable, UUPSUpgradeable, AccessControlUpgradeable, Pau
      * @param name The name of the token
      * @param chainId The chain ID to remove the association for
      */
-    function removeTokenAssociation(
-        string calldata name,
-        uint256 chainId
-    ) public onlyRole(DEFAULT_ADMIN_ROLE) {
+    function removeTokenAssociation(string calldata name, uint256 chainId) public onlyRole(DEFAULT_ADMIN_ROLE) {
         require(_supportedTokens[name], "Token does not exist");
         require(_tokenAssets[name][chainId] != address(0), "Association does not exist");
-        
+
         delete _tokenAssets[name][chainId];
         delete _tokenZrc20s[name][chainId];
-        
+
         // Remove chainId from the array
         uint256[] storage chainIds = _tokenChainIds[name];
         for (uint256 i = 0; i < chainIds.length; i++) {
@@ -452,7 +430,7 @@ contract Router is Initializable, UUPSUpgradeable, AccessControlUpgradeable, Pau
                 break;
             }
         }
-        
+
         emit TokenAssociationRemoved(name, chainId);
     }
 
@@ -464,18 +442,15 @@ contract Router is Initializable, UUPSUpgradeable, AccessControlUpgradeable, Pau
      * @return zrc20Addr The ZRC20 address on ZetaChain
      * @return chainIdValue The chain ID where the asset exists
      */
-    function getTokenAssociation(
-        address zrc20,
-        uint256 chainId
-    ) public view returns (
-        address asset,
-        address zrc20Addr,
-        uint256 chainIdValue
-    ) {
+    function getTokenAssociation(address zrc20, uint256 chainId)
+        public
+        view
+        returns (address asset, address zrc20Addr, uint256 chainIdValue)
+    {
         string memory name = zrc20ToTokenName[zrc20];
         require(_supportedTokens[name], "Token does not exist");
         require(_tokenAssets[name][chainId] != address(0), "Association does not exist");
-        
+
         return (_tokenAssets[name][chainId], _tokenZrc20s[name][chainId], chainId);
     }
 
@@ -486,19 +461,19 @@ contract Router is Initializable, UUPSUpgradeable, AccessControlUpgradeable, Pau
      * @return assets Array of asset addresses
      * @return zrc20s Array of ZRC20 addresses
      */
-    function getTokenAssociations(string calldata name) public view returns (
-        uint256[] memory chainIds,
-        address[] memory assets,
-        address[] memory zrc20s
-    ) {
+    function getTokenAssociations(string calldata name)
+        public
+        view
+        returns (uint256[] memory chainIds, address[] memory assets, address[] memory zrc20s)
+    {
         require(_supportedTokens[name], "Token does not exist");
-        
+
         chainIds = _tokenChainIds[name];
         uint256 length = chainIds.length;
-        
+
         assets = new address[](length);
         zrc20s = new address[](length);
-        
+
         for (uint256 i = 0; i < length; i++) {
             uint256 chainId = chainIds[i];
             assets[i] = _tokenAssets[name][chainId];
@@ -531,4 +506,4 @@ contract Router is Initializable, UUPSUpgradeable, AccessControlUpgradeable, Pau
         require(newGasLimit > 0, "Gas limit cannot be zero");
         withdrawGasLimit = newGasLimit;
     }
-} 
+}

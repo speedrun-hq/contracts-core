@@ -15,18 +15,18 @@ contract RouterImplementationScript is Script {
     function run() public {
         uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
         address deployer = vm.addr(deployerPrivateKey);
-        
+
         console2.log("Deployer:", deployer);
         console2.log("Deployer balance:", deployer.balance);
-        
+
         vm.startBroadcast(deployerPrivateKey);
-        
+
         // Deploy the implementation contract (uninitialized)
         // The implementation should NEVER be initialized directly
         Router implementation = new Router();
-        
+
         console2.log("Router implementation deployed at:", address(implementation));
 
         vm.stopBroadcast();
     }
-} 
+}

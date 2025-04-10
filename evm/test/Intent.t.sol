@@ -19,7 +19,7 @@ contract IntentTest is Test {
     address public user1;
     address public user2;
     address public router;
-    
+
     // Role constants
     bytes32 public constant DEFAULT_ADMIN_ROLE = 0x00;
     bytes32 public constant PAUSER_ROLE = keccak256("PAUSER_ROLE");
@@ -36,12 +36,7 @@ contract IntentTest is Test {
     );
 
     // Define the event for intent fulfillment
-    event IntentFulfilled(
-        bytes32 indexed intentId,
-        address indexed asset,
-        uint256 amount,
-        address indexed receiver
-    );
+    event IntentFulfilled(bytes32 indexed intentId, address indexed asset, uint256 amount, address indexed receiver);
 
     // Define the event for intent settlement
     event IntentSettled(
@@ -73,17 +68,10 @@ contract IntentTest is Test {
         intentImplementation = new Intent();
 
         // Prepare initialization data
-        bytes memory initData = abi.encodeWithSelector(
-            Intent.initialize.selector,
-            address(gateway),
-            router
-        );
+        bytes memory initData = abi.encodeWithSelector(Intent.initialize.selector, address(gateway), router);
 
         // Deploy proxy
-        ERC1967Proxy proxy = new ERC1967Proxy(
-            address(intentImplementation),
-            initData
-        );
+        ERC1967Proxy proxy = new ERC1967Proxy(address(intentImplementation), initData);
         intent = Intent(address(proxy));
 
         // Setup test tokens - We'll mint specific amounts in each test rather than here
@@ -101,27 +89,27 @@ contract IntentTest is Test {
         uint256 counter = 42;
         uint256 salt = 123;
         uint256 chainId = 1337;
-        
+
         // Expected result (manually computed)
         bytes32 expectedId = keccak256(abi.encodePacked(counter, salt, chainId));
-        
+
         // Call the function and verify result
         bytes32 actualId = intent.computeIntentId(counter, salt, chainId);
-        
+
         assertEq(actualId, expectedId, "Intent ID computation does not match expected value");
     }
-    
+
     function test_ComputeIntentId_Uniqueness() public {
         // Different counters
         bytes32 id1 = intent.computeIntentId(1, 100, 1);
         bytes32 id2 = intent.computeIntentId(2, 100, 1);
         assertTrue(id1 != id2, "IDs should be different with different counters");
-        
+
         // Different salts
         bytes32 id3 = intent.computeIntentId(1, 100, 1);
         bytes32 id4 = intent.computeIntentId(1, 200, 1);
         assertTrue(id3 != id4, "IDs should be different with different salts");
-        
+
         // Different chain IDs
         bytes32 id5 = intent.computeIntentId(1, 100, 1);
         bytes32 id6 = intent.computeIntentId(1, 100, 2);
@@ -131,46 +119,39 @@ contract IntentTest is Test {
     function test_GetNextIntentId() public {
         uint256 salt = 789;
         uint256 currentChainId = block.chainid;
-        
+
         // Get the initial counter value
         uint256 initialCounter = intent.intentCounter();
-        
+
         // Get the next intent ID
         bytes32 nextIntentId = intent.getNextIntentId(salt);
-        
+
         // Verify it matches the expected computation
         assertEq(nextIntentId, intent.computeIntentId(initialCounter, salt, currentChainId));
-        
+
         // Mint tokens for initiate
         uint256 amount = 50 ether;
         uint256 tip = 5 ether;
         token.mint(user1, amount + tip);
         vm.prank(user1);
         token.approve(address(intent), amount + tip);
-        
+
         // Initiate an intent which should increment the counter
         uint256 targetChain = 2;
         bytes memory receiver = abi.encodePacked(user2);
-        
+
         vm.prank(user1);
-        bytes32 actualIntentId = intent.initiate(
-            address(token),
-            amount,
-            targetChain,
-            receiver,
-            tip,
-            salt
-        );
-        
+        bytes32 actualIntentId = intent.initiate(address(token), amount, targetChain, receiver, tip, salt);
+
         // Verify the intent ID matches what we predicted
         assertEq(actualIntentId, nextIntentId);
-        
+
         // Verify counter was incremented
         assertEq(intent.intentCounter(), initialCounter + 1);
-        
+
         // Get the next intent ID again
         bytes32 nextIntentId2 = intent.getNextIntentId(salt);
-        
+
         // Verify it's different than the previous one
         assertTrue(nextIntentId2 != nextIntentId);
     }
@@ -181,33 +162,22 @@ contract IntentTest is Test {
         address asset = address(token);
         uint256 amount = 50 ether;
         address receiver = user2;
-        
+
         // Expected result calculated using PayloadUtils directly
-        bytes32 expectedIndex = PayloadUtils.computeFulfillmentIndex(
-            intentId,
-            asset,
-            amount,
-            receiver
-        );
-        
+        bytes32 expectedIndex = PayloadUtils.computeFulfillmentIndex(intentId, asset, amount, receiver);
+
         // Call the function and verify result
-        bytes32 actualIndex = intent.getFulfillmentIndex(
-            intentId,
-            asset,
-            amount,
-            receiver
-        );
-        
+        bytes32 actualIndex = intent.getFulfillmentIndex(intentId, asset, amount, receiver);
+
         // Verify the computed index matches what we expect
         assertEq(actualIndex, expectedIndex, "Fulfillment index computation does not match expected value");
-        
+
         // Verify it matches with the internal computation too
-        assertEq(actualIndex, keccak256(abi.encodePacked(
-            intentId,
-            asset,
-            amount,
-            receiver
-        )), "Index doesn't match raw computation");
+        assertEq(
+            actualIndex,
+            keccak256(abi.encodePacked(intentId, asset, amount, receiver)),
+            "Index doesn't match raw computation"
+        );
     }
 
     function test_Initiate() public {
@@ -238,14 +208,7 @@ contract IntentTest is Test {
 
         // Call initiate
         vm.prank(user1);
-        bytes32 intentId = intent.initiate(
-            address(token),
-            amount,
-            targetChain,
-            receiver,
-            tip,
-            salt
-        );
+        bytes32 intentId = intent.initiate(address(token), amount, targetChain, receiver, tip, salt);
 
         // Verify intent ID
         assertEq(intentId, intent.computeIntentId(0, salt, currentChainId));
@@ -254,7 +217,13 @@ contract IntentTest is Test {
         assertEq(token.balanceOf(address(gateway)), amount + tip);
 
         // Verify gateway call data
-        (address callReceiver, uint256 callAmount, address callAsset, bytes memory callPayload, IGateway.RevertOptions memory callRevertOptions) = gateway.lastCall();
+        (
+            address callReceiver,
+            uint256 callAmount,
+            address callAsset,
+            bytes memory callPayload,
+            IGateway.RevertOptions memory callRevertOptions
+        ) = gateway.lastCall();
         assertEq(callReceiver, router);
         assertEq(callAmount, amount + tip);
         assertEq(callAsset, address(token));
@@ -284,14 +253,7 @@ contract IntentTest is Test {
         // Call initiate and expect revert with ERC20InsufficientBalance error
         vm.prank(user1);
         vm.expectRevert();
-        intent.initiate(
-            address(token),
-            amount,
-            targetChain,
-            receiver,
-            tip,
-            salt
-        );
+        intent.initiate(address(token), amount, targetChain, receiver, tip, salt);
     }
 
     function test_Fulfill() public {
@@ -308,14 +270,7 @@ contract IntentTest is Test {
         token.approve(address(intent), amount + tip);
 
         vm.prank(user1);
-        bytes32 intentId = intent.initiate(
-            address(token),
-            amount,
-            targetChain,
-            receiver,
-            tip,
-            salt
-        );
+        bytes32 intentId = intent.initiate(address(token), amount, targetChain, receiver, tip, salt);
 
         // Mint tokens to the fulfiller (user1) and approve them for the intent contract
         token.mint(user1, amount);
@@ -324,29 +279,14 @@ contract IntentTest is Test {
 
         // Expect the IntentFulfilled event
         vm.expectEmit(true, true, false, true);
-        emit IntentFulfilled(
-            intentId,
-            address(token),
-            amount,
-            user2
-        );
+        emit IntentFulfilled(intentId, address(token), amount, user2);
 
         // Call fulfill
         vm.prank(user1);
-        intent.fulfill(
-            intentId,
-            address(token),
-            amount,
-            user2
-        );
+        intent.fulfill(intentId, address(token), amount, user2);
 
         // Verify fulfillment was registered
-        bytes32 fulfillmentIndex = PayloadUtils.computeFulfillmentIndex(
-            intentId,
-            address(token),
-            amount,
-            user2
-        );
+        bytes32 fulfillmentIndex = PayloadUtils.computeFulfillmentIndex(intentId, address(token), amount, user2);
         assertEq(intent.fulfillments(fulfillmentIndex), user1);
 
         // Verify tokens were transferred from user1 to user2
@@ -367,14 +307,7 @@ contract IntentTest is Test {
         token.approve(address(intent), amount + tip);
 
         vm.prank(user1);
-        bytes32 intentId = intent.initiate(
-            address(token),
-            amount,
-            targetChain,
-            receiver,
-            tip,
-            salt
-        );
+        bytes32 intentId = intent.initiate(address(token), amount, targetChain, receiver, tip, salt);
 
         // Mint tokens to the fulfiller (user1) and approve them for the intent contract
         token.mint(user1, amount);
@@ -383,27 +316,17 @@ contract IntentTest is Test {
 
         // First fulfillment
         vm.prank(user1);
-        intent.fulfill(
-            intentId,
-            address(token),
-            amount,
-            user2
-        );
+        intent.fulfill(intentId, address(token), amount, user2);
 
         // Try to fulfill again with same parameters and expect revert
         // First need to mint and approve more tokens
         token.mint(user1, amount);
         vm.prank(user1);
         token.approve(address(intent), amount);
-        
+
         vm.prank(user1);
         vm.expectRevert("Intent already fulfilled with these parameters");
-        intent.fulfill(
-            intentId,
-            address(token),
-            amount,
-            user2
-        );
+        intent.fulfill(intentId, address(token), amount, user2);
     }
 
     function test_FulfillWithDifferentParameters() public {
@@ -420,14 +343,7 @@ contract IntentTest is Test {
         token.approve(address(intent), amount + tip);
 
         vm.prank(user1);
-        bytes32 intentId = intent.initiate(
-            address(token),
-            amount,
-            targetChain,
-            receiver,
-            tip,
-            salt
-        );
+        bytes32 intentId = intent.initiate(address(token), amount, targetChain, receiver, tip, salt);
 
         // Mint tokens to the fulfiller (user1) and approve them for both fulfillments
         token.mint(user1, amount + (amount + 1 ether));
@@ -436,35 +352,16 @@ contract IntentTest is Test {
 
         // First fulfillment
         vm.prank(user1);
-        intent.fulfill(
-            intentId,
-            address(token),
-            amount,
-            user2
-        );
+        intent.fulfill(intentId, address(token), amount, user2);
 
         // Try to fulfill with different amount
         vm.prank(user1);
-        intent.fulfill(
-            intentId,
-            address(token),
-            amount + 1 ether,
-            user2
-        );
+        intent.fulfill(intentId, address(token), amount + 1 ether, user2);
 
         // Verify both fulfillments were registered
-        bytes32 fulfillmentIndex1 = PayloadUtils.computeFulfillmentIndex(
-            intentId,
-            address(token),
-            amount,
-            user2
-        );
-        bytes32 fulfillmentIndex2 = PayloadUtils.computeFulfillmentIndex(
-            intentId,
-            address(token),
-            amount + 1 ether,
-            user2
-        );
+        bytes32 fulfillmentIndex1 = PayloadUtils.computeFulfillmentIndex(intentId, address(token), amount, user2);
+        bytes32 fulfillmentIndex2 =
+            PayloadUtils.computeFulfillmentIndex(intentId, address(token), amount + 1 ether, user2);
         assertEq(intent.fulfillments(fulfillmentIndex1), user1);
         assertEq(intent.fulfillments(fulfillmentIndex2), user1);
 
@@ -487,14 +384,7 @@ contract IntentTest is Test {
 
         // Initiate the intent
         vm.prank(user1);
-        bytes32 intentId = intent.initiate(
-            address(token),
-            amount,
-            targetChain,
-            receiver,
-            tip,
-            salt
-        );
+        bytes32 intentId = intent.initiate(address(token), amount, targetChain, receiver, tip, salt);
 
         // Mint additional tokens for fulfillment
         token.mint(user1, amount);
@@ -503,12 +393,7 @@ contract IntentTest is Test {
 
         // Fulfill the intent
         vm.prank(user1);
-        intent.fulfill(
-            intentId,
-            address(token),
-            amount,
-            user2
-        );
+        intent.fulfill(intentId, address(token), amount, user2);
 
         // Prepare settlement payload
         bytes memory settlementPayload = PayloadUtils.encodeSettlementPayload(
@@ -517,7 +402,7 @@ contract IntentTest is Test {
             address(token),
             user2,
             tip,
-            amount  // actualAmount same as amount in the test case
+            amount // actualAmount same as amount in the test case
         );
 
         // Transfer tokens to gateway for settlement
@@ -527,20 +412,10 @@ contract IntentTest is Test {
 
         // Call onCall through gateway
         vm.prank(address(gateway));
-        intent.onCall(
-            Intent.MessageContext({
-                sender: router
-            }),
-            settlementPayload
-        );
+        intent.onCall(Intent.MessageContext({sender: router}), settlementPayload);
 
         // Verify settlement record
-        bytes32 fulfillmentIndex = PayloadUtils.computeFulfillmentIndex(
-            intentId,
-            address(token),
-            amount,
-            user2
-        );
+        bytes32 fulfillmentIndex = PayloadUtils.computeFulfillmentIndex(intentId, address(token), amount, user2);
         (bool settled, bool fulfilled, uint256 paidTip, address fulfiller) = intent.settlements(fulfillmentIndex);
         assertTrue(settled, "Settlement should be marked as settled");
         assertTrue(fulfilled, "Settlement should be marked as fulfilled");
@@ -570,14 +445,7 @@ contract IntentTest is Test {
         token.approve(address(intent), amount + tip);
 
         vm.prank(user1);
-        bytes32 intentId = intent.initiate(
-            address(token),
-            amount,
-            targetChain,
-            receiver,
-            tip,
-            salt
-        );
+        bytes32 intentId = intent.initiate(address(token), amount, targetChain, receiver, tip, salt);
 
         // Prepare settlement payload
         bytes memory settlementPayload = PayloadUtils.encodeSettlementPayload(
@@ -586,7 +454,7 @@ contract IntentTest is Test {
             address(token),
             user2,
             tip,
-            amount  // actualAmount same as amount in the test case
+            amount // actualAmount same as amount in the test case
         );
 
         // Transfer tokens to gateway for settlement
@@ -596,20 +464,10 @@ contract IntentTest is Test {
 
         // Call onCall through gateway
         vm.prank(address(gateway));
-        intent.onCall(
-            Intent.MessageContext({
-                sender: router
-            }),
-            settlementPayload
-        );
+        intent.onCall(Intent.MessageContext({sender: router}), settlementPayload);
 
         // Verify settlement record
-        bytes32 fulfillmentIndex = PayloadUtils.computeFulfillmentIndex(
-            intentId,
-            address(token),
-            amount,
-            user2
-        );
+        bytes32 fulfillmentIndex = PayloadUtils.computeFulfillmentIndex(intentId, address(token), amount, user2);
         (bool settled, bool fulfilled, uint256 paidTip, address fulfiller) = intent.settlements(fulfillmentIndex);
         assertTrue(settled);
         assertFalse(fulfilled);
@@ -634,14 +492,7 @@ contract IntentTest is Test {
         token.approve(address(intent), amount + tip);
 
         vm.prank(user1);
-        bytes32 intentId = intent.initiate(
-            address(token),
-            amount,
-            targetChain,
-            receiver,
-            tip,
-            salt
-        );
+        bytes32 intentId = intent.initiate(address(token), amount, targetChain, receiver, tip, salt);
 
         // Prepare settlement payload
         bytes memory settlementPayload = PayloadUtils.encodeSettlementPayload(
@@ -650,7 +501,7 @@ contract IntentTest is Test {
             address(token),
             user2,
             tip,
-            amount  // actualAmount same as amount in the test case
+            amount // actualAmount same as amount in the test case
         );
 
         // Transfer tokens to gateway for settlement
@@ -685,15 +536,8 @@ contract IntentTest is Test {
 
         // Initiate an intent from user1
         vm.prank(user1);
-        bytes32 intentId = intent.initiate(
-            address(token),
-            amount,
-            targetChain,
-            receiver,
-            tip,
-            salt
-        );
-        
+        bytes32 intentId = intent.initiate(address(token), amount, targetChain, receiver, tip, salt);
+
         // Mint additional tokens for fulfillment
         token.mint(user1, amount);
         vm.prank(user1);
@@ -701,21 +545,16 @@ contract IntentTest is Test {
 
         // Fulfill the intent with the original amount (for indexing purposes)
         vm.prank(user1);
-        intent.fulfill(
-            intentId,
-            address(token),
-            amount,
-            user2
-        );
+        intent.fulfill(intentId, address(token), amount, user2);
 
         // Prepare settlement payload with different actualAmount
         bytes memory settlementPayload = PayloadUtils.encodeSettlementPayload(
             intentId,
-            amount,            // Original amount (for index calculation)
+            amount, // Original amount (for index calculation)
             address(token),
             user2,
             tip,
-            actualAmount       // Reduced actual amount to transfer
+            actualAmount // Reduced actual amount to transfer
         );
 
         // Transfer tokens to gateway for settlement
@@ -725,18 +564,13 @@ contract IntentTest is Test {
 
         // Call onCall through gateway
         vm.prank(address(gateway));
-        intent.onCall(
-            Intent.MessageContext({
-                sender: router
-            }),
-            settlementPayload
-        );
+        intent.onCall(Intent.MessageContext({sender: router}), settlementPayload);
 
         // Verify settlement record
         bytes32 fulfillmentIndex = PayloadUtils.computeFulfillmentIndex(
             intentId,
             address(token),
-            amount,            // Original amount for index calculation
+            amount, // Original amount for index calculation
             user2
         );
         (bool settled, bool fulfilled, uint256 paidTip, address fulfiller) = intent.settlements(fulfillmentIndex);
@@ -748,7 +582,7 @@ contract IntentTest is Test {
         // Verify tokens were transferred to fulfiller
         // User1 should receive actualAmount (93 ether) + tip (3 ether) = 96 ether
         assertEq(token.balanceOf(user1), actualAmount + tip, "User1 should receive actualAmount + tip");
-        
+
         // Additional check: the payment should be actualAmount + tip
         // rather than amount + tip that would have been sent with the original amount
         assertEq(actualAmount + tip, 96 ether, "Payment amount should be actualAmount + tip");
@@ -769,14 +603,7 @@ contract IntentTest is Test {
         token.approve(address(intent), amount + tip);
 
         vm.prank(user1);
-        bytes32 intentId = intent.initiate(
-            address(token),
-            amount,
-            targetChain,
-            receiver,
-            tip,
-            salt
-        );
+        bytes32 intentId = intent.initiate(address(token), amount, targetChain, receiver, tip, salt);
 
         // Prepare settlement payload
         bytes memory settlementPayload = PayloadUtils.encodeSettlementPayload(
@@ -785,7 +612,7 @@ contract IntentTest is Test {
             address(token),
             user2,
             tip,
-            amount  // actualAmount same as amount in the test case
+            amount // actualAmount same as amount in the test case
         );
 
         // Transfer tokens to gateway for settlement
@@ -795,38 +622,23 @@ contract IntentTest is Test {
 
         // Call onCall through gateway to settle the intent
         vm.prank(address(gateway));
-        intent.onCall(
-            Intent.MessageContext({
-                sender: router
-            }),
-            settlementPayload
-        );
+        intent.onCall(Intent.MessageContext({sender: router}), settlementPayload);
 
         // Verify settlement was recorded
-        bytes32 fulfillmentIndex = PayloadUtils.computeFulfillmentIndex(
-            intentId,
-            address(token),
-            amount,
-            user2
-        );
-        (bool settled, ,, ) = intent.settlements(fulfillmentIndex);
+        bytes32 fulfillmentIndex = PayloadUtils.computeFulfillmentIndex(intentId, address(token), amount, user2);
+        (bool settled,,,) = intent.settlements(fulfillmentIndex);
         assertTrue(settled, "Settlement should be marked as settled");
-        
+
         // Now try to fulfill the already settled intent
         // Mint tokens to the fulfiller (user1) and approve them for the intent contract
         token.mint(user1, amount);
         vm.prank(user1);
         token.approve(address(intent), amount);
-        
+
         // Expect revert with "Intent already settled" error
         vm.prank(user1);
         vm.expectRevert("Intent already settled");
-        intent.fulfill(
-            intentId,
-            address(token),
-            amount,
-            user2
-        );
+        intent.fulfill(intentId, address(token), amount, user2);
     }
 
     function test_SettleAlreadySettled() public {
@@ -843,14 +655,7 @@ contract IntentTest is Test {
         token.approve(address(intent), amount + tip);
 
         vm.prank(user1);
-        bytes32 intentId = intent.initiate(
-            address(token),
-            amount,
-            targetChain,
-            receiver,
-            tip,
-            salt
-        );
+        bytes32 intentId = intent.initiate(address(token), amount, targetChain, receiver, tip, salt);
 
         // Prepare settlement payload
         bytes memory settlementPayload = PayloadUtils.encodeSettlementPayload(
@@ -859,7 +664,7 @@ contract IntentTest is Test {
             address(token),
             user2,
             tip,
-            amount  // actualAmount same as amount in the test case
+            amount // actualAmount same as amount in the test case
         );
 
         // Transfer tokens to gateway for settlement
@@ -869,38 +674,23 @@ contract IntentTest is Test {
 
         // Call onCall through gateway to settle the intent the first time
         vm.prank(address(gateway));
-        intent.onCall(
-            Intent.MessageContext({
-                sender: router
-            }),
-            settlementPayload
-        );
+        intent.onCall(Intent.MessageContext({sender: router}), settlementPayload);
 
         // Verify settlement was recorded
-        bytes32 fulfillmentIndex = PayloadUtils.computeFulfillmentIndex(
-            intentId,
-            address(token),
-            amount,
-            user2
-        );
-        (bool settled, ,, ) = intent.settlements(fulfillmentIndex);
+        bytes32 fulfillmentIndex = PayloadUtils.computeFulfillmentIndex(intentId, address(token), amount, user2);
+        (bool settled,,,) = intent.settlements(fulfillmentIndex);
         assertTrue(settled, "Settlement should be marked as settled");
-        
+
         // Now try to settle the already settled intent again
         // Transfer more tokens to gateway for the second settlement attempt
         token.mint(address(gateway), amount + tip);
         vm.prank(address(gateway));
         token.approve(address(intent), amount + tip);
-        
+
         // Expect revert with "Intent already settled" error
         vm.prank(address(gateway));
         vm.expectRevert("Intent already settled");
-        intent.onCall(
-            Intent.MessageContext({
-                sender: router
-            }),
-            settlementPayload
-        );
+        intent.onCall(Intent.MessageContext({sender: router}), settlementPayload);
     }
 
     function test_OnCallEmitsSettlementEvent() public {
@@ -917,14 +707,7 @@ contract IntentTest is Test {
         token.approve(address(intent), amount + tip);
 
         vm.prank(user1);
-        bytes32 intentId = intent.initiate(
-            address(token),
-            amount,
-            targetChain,
-            receiver,
-            tip,
-            salt
-        );
+        bytes32 intentId = intent.initiate(address(token), amount, targetChain, receiver, tip, salt);
 
         // Prepare settlement payload
         bytes memory settlementPayload = PayloadUtils.encodeSettlementPayload(
@@ -933,14 +716,14 @@ contract IntentTest is Test {
             address(token),
             user2,
             tip,
-            amount  // actualAmount same as amount in the test case
+            amount // actualAmount same as amount in the test case
         );
 
         // Transfer tokens to gateway for settlement
         token.mint(address(gateway), amount + tip);
         vm.prank(address(gateway));
         token.approve(address(intent), amount + tip);
-        
+
         // Test case 1: Settle without fulfillment
         // Expect the IntentSettled event (with fulfilled=false)
         vm.expectEmit(true, true, false, true);
@@ -949,55 +732,38 @@ contract IntentTest is Test {
             address(token),
             amount,
             user2,
-            false,  // fulfilled
-            address(0),  // fulfiller
-            amount,  // actualAmount
-            0  // paidTip
+            false, // fulfilled
+            address(0), // fulfiller
+            amount, // actualAmount
+            0 // paidTip
         );
 
         // Call onCall through gateway to settle the intent
         vm.prank(address(gateway));
-        intent.onCall(
-            Intent.MessageContext({
-                sender: router
-            }),
-            settlementPayload
-        );
-        
+        intent.onCall(Intent.MessageContext({sender: router}), settlementPayload);
+
         // Test case 2: Intent with fulfillment
         // Create another intent
         uint256 amount2 = 150 ether;
         uint256 tip2 = 15 ether;
         uint256 salt2 = 456;
-        
+
         // Mint tokens for the second initiate
         token.mint(user1, amount2 + tip2);
         vm.prank(user1);
         token.approve(address(intent), amount2 + tip2);
-        
+
         vm.prank(user1);
-        bytes32 intentId2 = intent.initiate(
-            address(token),
-            amount2,
-            targetChain,
-            receiver,
-            tip2,
-            salt2
-        );
-        
+        bytes32 intentId2 = intent.initiate(address(token), amount2, targetChain, receiver, tip2, salt2);
+
         // Fulfill the intent first
         token.mint(user1, amount2);
         vm.prank(user1);
         token.approve(address(intent), amount2);
-        
+
         vm.prank(user1);
-        intent.fulfill(
-            intentId2,
-            address(token),
-            amount2,
-            user2
-        );
-        
+        intent.fulfill(intentId2, address(token), amount2, user2);
+
         // Prepare settlement payload for the second intent
         bytes memory settlementPayload2 = PayloadUtils.encodeSettlementPayload(
             intentId2,
@@ -1005,14 +771,14 @@ contract IntentTest is Test {
             address(token),
             user2,
             tip2,
-            amount2  // actualAmount
+            amount2 // actualAmount
         );
-        
+
         // Transfer tokens to gateway for settlement
         token.mint(address(gateway), amount2 + tip2);
         vm.prank(address(gateway));
         token.approve(address(intent), amount2 + tip2);
-        
+
         // Expect the IntentSettled event (with fulfilled=true)
         vm.expectEmit(true, true, false, true);
         emit IntentSettled(
@@ -1020,29 +786,24 @@ contract IntentTest is Test {
             address(token),
             amount2,
             user2,
-            true,  // fulfilled
-            user1,  // fulfiller
-            amount2,  // actualAmount
-            tip2  // paidTip
+            true, // fulfilled
+            user1, // fulfiller
+            amount2, // actualAmount
+            tip2 // paidTip
         );
-        
+
         // Call onCall through gateway to settle the second intent
         vm.prank(address(gateway));
-        intent.onCall(
-            Intent.MessageContext({
-                sender: router
-            }),
-            settlementPayload2
-        );
+        intent.onCall(Intent.MessageContext({sender: router}), settlementPayload2);
     }
 
     function test_PauseUnpause() public {
         // Initially the contract is not paused
         assertFalse(intent.paused());
-        
+
         // Pause the contract
         intent.pause();
-        
+
         // Verify contract is paused
         assertTrue(intent.paused());
 
@@ -1052,86 +813,76 @@ contract IntentTest is Test {
         uint256 targetChain = 1;
         bytes memory receiver = abi.encodePacked(user2);
         uint256 salt = 123;
-        
+
         token.mint(user1, amount + tip);
         vm.prank(user1);
         token.approve(address(intent), amount + tip);
-        
+
         vm.prank(user1);
         vm.expectRevert(abi.encodeWithSignature("EnforcedPause()"));
-        intent.initiate(
-            address(token),
-            amount,
-            targetChain,
-            receiver,
-            tip,
-            salt
-        );
-        
+        intent.initiate(address(token), amount, targetChain, receiver, tip, salt);
+
         // Unpause the contract
         intent.unpause();
-        
+
         // Verify contract is not paused
         assertFalse(intent.paused());
-        
+
         // Should be able to initiate now
         vm.prank(user1);
-        bytes32 intentId = intent.initiate(
-            address(token),
-            amount,
-            targetChain,
-            receiver,
-            tip,
-            salt
-        );
-        
+        bytes32 intentId = intent.initiate(address(token), amount, targetChain, receiver, tip, salt);
+
         // Verify initiate worked
         assertTrue(intentId != bytes32(0));
     }
-    
+
     function test_OnlyPauserCanPause() public {
         // Create a non-pauser account
         address nonPauser = makeAddr("nonPauser");
-        
+
         // Try to pause from non-pauser account - should revert
         vm.prank(nonPauser);
-        vm.expectRevert(abi.encodeWithSignature("AccessControlUnauthorizedAccount(address,bytes32)", nonPauser, PAUSER_ROLE));
+        vm.expectRevert(
+            abi.encodeWithSignature("AccessControlUnauthorizedAccount(address,bytes32)", nonPauser, PAUSER_ROLE)
+        );
         intent.pause();
-        
+
         // Give PAUSER_ROLE to nonPauser
         vm.prank(owner);
         intent.grantRole(PAUSER_ROLE, nonPauser);
-        
+
         // Now nonPauser should be able to pause
         vm.prank(nonPauser);
         intent.pause();
-        
+
         // Verify contract is paused
         assertTrue(intent.paused());
     }
-    
+
     function test_OnlyAdminCanUnpause() public {
         // First pause the contract
         intent.pause();
-        
+
         // Create a pauser account that is not an admin
         address pauser = makeAddr("pauser");
         vm.prank(owner);
         intent.grantRole(PAUSER_ROLE, pauser);
-        
+
         // The pauser should not be able to unpause
         vm.prank(pauser);
-        vm.expectRevert(abi.encodeWithSignature("AccessControlUnauthorizedAccount(address,bytes32)", pauser, DEFAULT_ADMIN_ROLE));
+        vm.expectRevert(
+            abi.encodeWithSignature("AccessControlUnauthorizedAccount(address,bytes32)", pauser, DEFAULT_ADMIN_ROLE)
+        );
         intent.unpause();
-        
+
         // The admin should be able to unpause
         vm.prank(owner);
         intent.unpause();
-        
+
         // Verify contract is not paused
         assertFalse(intent.paused());
     }
-    
+
     function test_OnCallDuringPause() public {
         // Create an intent
         uint256 amount = 100 ether;
@@ -1146,18 +897,11 @@ contract IntentTest is Test {
         token.approve(address(intent), amount + tip);
 
         vm.prank(user1);
-        bytes32 intentId = intent.initiate(
-            address(token),
-            amount,
-            targetChain,
-            receiver,
-            tip,
-            salt
-        );
+        bytes32 intentId = intent.initiate(address(token), amount, targetChain, receiver, tip, salt);
 
         // Pause the contract
         intent.pause();
-        
+
         // Verify contract is paused
         assertTrue(intent.paused());
 
@@ -1168,7 +912,7 @@ contract IntentTest is Test {
             address(token),
             user2,
             tip,
-            amount  // actualAmount same as amount in the test case
+            amount // actualAmount same as amount in the test case
         );
 
         // Transfer tokens to gateway for settlement
@@ -1178,20 +922,10 @@ contract IntentTest is Test {
 
         // onCall should work even when paused
         vm.prank(address(gateway));
-        intent.onCall(
-            Intent.MessageContext({
-                sender: router
-            }),
-            settlementPayload
-        );
+        intent.onCall(Intent.MessageContext({sender: router}), settlementPayload);
 
         // Verify settlement record
-        bytes32 fulfillmentIndex = PayloadUtils.computeFulfillmentIndex(
-            intentId,
-            address(token),
-            amount,
-            user2
-        );
+        bytes32 fulfillmentIndex = PayloadUtils.computeFulfillmentIndex(intentId, address(token), amount, user2);
         (bool settled, bool fulfilled, uint256 paidTip, address fulfiller) = intent.settlements(fulfillmentIndex);
         assertTrue(settled);
         assertFalse(fulfilled);
@@ -1216,18 +950,11 @@ contract IntentTest is Test {
         token.approve(address(intent), amount + tip);
 
         vm.prank(user1);
-        bytes32 intentId = intent.initiate(
-            address(token),
-            amount,
-            targetChain,
-            receiver,
-            tip,
-            salt
-        );
+        bytes32 intentId = intent.initiate(address(token), amount, targetChain, receiver, tip, salt);
 
         // Pause the contract
         intent.pause();
-        
+
         // Verify contract is paused
         assertTrue(intent.paused());
 
@@ -1239,99 +966,88 @@ contract IntentTest is Test {
         // Fulfill should revert when paused
         vm.prank(user1);
         vm.expectRevert(abi.encodeWithSignature("EnforcedPause()"));
-        intent.fulfill(
-            intentId,
-            address(token),
-            amount,
-            user2
-        );
-        
+        intent.fulfill(intentId, address(token), amount, user2);
+
         // Unpause
         intent.unpause();
-        
+
         // Fulfill should work after unpausing
         vm.prank(user1);
-        intent.fulfill(
-            intentId,
-            address(token),
-            amount,
-            user2
-        );
-        
+        intent.fulfill(intentId, address(token), amount, user2);
+
         // Verify fulfillment was registered
-        bytes32 fulfillmentIndex = PayloadUtils.computeFulfillmentIndex(
-            intentId,
-            address(token),
-            amount,
-            user2
-        );
+        bytes32 fulfillmentIndex = PayloadUtils.computeFulfillmentIndex(intentId, address(token), amount, user2);
         assertEq(intent.fulfillments(fulfillmentIndex), user1);
     }
-    
+
     function test_UpdateGateway() public {
         // Deploy a new mock gateway
         MockGateway newGateway = new MockGateway();
         address oldGateway = intent.gateway();
-        
+
         // Expect the GatewayUpdated event
         vm.expectEmit(true, true, false, false);
         emit GatewayUpdated(oldGateway, address(newGateway));
-        
+
         // Update the gateway
         intent.updateGateway(address(newGateway));
-        
+
         // Verify the gateway was updated
         assertEq(intent.gateway(), address(newGateway));
     }
-    
+
     function test_UpdateRouter() public {
         // Create a new router address
         address newRouter = makeAddr("newRouter");
         address oldRouter = intent.router();
-        
+
         // Expect the RouterUpdated event
         vm.expectEmit(true, true, false, false);
         emit RouterUpdated(oldRouter, newRouter);
-        
+
         // Update the router
         intent.updateRouter(newRouter);
-        
+
         // Verify the router was updated
         assertEq(intent.router(), newRouter);
     }
-    
+
     function test_UpdateGateway_ZeroAddress() public {
         // Try to update gateway to zero address - should revert
         vm.expectRevert("Gateway cannot be zero address");
         intent.updateGateway(address(0));
     }
-    
+
     function test_UpdateRouter_ZeroAddress() public {
         // Try to update router to zero address - should revert
         vm.expectRevert("Router cannot be zero address");
         intent.updateRouter(address(0));
     }
-    
+
     function test_UpdateGateway_NonAdmin() public {
         // Create a non-admin account
         address nonAdmin = makeAddr("nonAdmin");
-        
+
         // Deploy a new mock gateway
         MockGateway newGateway = new MockGateway();
-        
+
         // Try to update gateway from non-admin account - should revert
         vm.prank(nonAdmin);
-        vm.expectRevert(abi.encodeWithSignature("AccessControlUnauthorizedAccount(address,bytes32)", nonAdmin, DEFAULT_ADMIN_ROLE));
+        vm.expectRevert(
+            abi.encodeWithSignature("AccessControlUnauthorizedAccount(address,bytes32)", nonAdmin, DEFAULT_ADMIN_ROLE)
+        );
         intent.updateGateway(address(newGateway));
     }
-    
+
     function test_UpdateRouter_NonAdmin() public {
         // Create a non-admin account
         address nonAdmin = makeAddr("nonAdmin");
-        
+
         // Try to update router from non-admin account - should revert
         vm.prank(nonAdmin);
-        vm.expectRevert(abi.encodeWithSignature("AccessControlUnauthorizedAccount(address,bytes32)", nonAdmin, DEFAULT_ADMIN_ROLE));
+        vm.expectRevert(
+            abi.encodeWithSignature("AccessControlUnauthorizedAccount(address,bytes32)", nonAdmin, DEFAULT_ADMIN_ROLE)
+        );
         intent.updateRouter(makeAddr("anotherRouter"));
     }
 
@@ -1339,4 +1055,4 @@ contract IntentTest is Test {
     // - complete
     // - onCall
     // - onRevert
-} 
+}

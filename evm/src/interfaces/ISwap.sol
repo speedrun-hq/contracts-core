@@ -11,11 +11,7 @@ interface ISwap {
      * @param gasFee The gas fee amount needed
      * @return amountOut The amount of output tokens received
      */
-    function swap(
-        address tokenIn,
-        address tokenOut,
-        uint256 amountIn,
-        address gasZRC20,
-        uint256 gasFee
-    ) external returns (uint256 amountOut);
-} 
+    function swap(address tokenIn, address tokenOut, uint256 amountIn, address gasZRC20, uint256 gasFee)
+        external
+        returns (uint256 amountOut);
+}
