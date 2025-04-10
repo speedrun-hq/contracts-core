@@ -43,4 +43,15 @@ interface IUniswapV2Router02 {
         external
         payable
         returns (uint256[] memory amounts);
+
+    /**
+     * @dev Given an output amount of an asset and an array of token addresses, calculates all preceding minimum input token amounts.
+     * @param amountOut The amount of output tokens to receive.
+     * @param path Array of token addresses. path.length must be >= 2.
+     * @return amounts Array of input token amounts.
+     */
+    function getAmountsIn(uint256 amountOut, address[] calldata path)
+        external
+        view
+        returns (uint256[] memory amounts);
 }

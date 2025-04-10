@@ -3,10 +3,20 @@ pragma solidity 0.8.26;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import "./interfaces/ISwap.sol";
-import "./interfaces/IUniswapV3Router.sol";
+import "../interfaces/ISwap.sol";
+import "../interfaces/IUniswapV3Router.sol";
 
-contract SwapV3 is ISwap {
+/**
+ * @title SwapUniswapV3
+ * @dev Implements token swapping functionality for cross-chain routing using Uniswap V3
+ *
+ * This contract handles the token swap process for the Router contract using Uniswap V3 pools.
+ * The swap process involves:
+ * 1. Converting input token to WZETA using exactInputSingle
+ * 2. Converting some WZETA to cover gas fees on the target chain using exactOutputSingle
+ * 3. Converting remaining WZETA to the destination token using exactInputSingle
+ */
+contract SwapUniswapV3 is ISwap {
     using SafeERC20 for IERC20;
 
     // Uniswap V3 Router address
@@ -76,5 +86,16 @@ contract SwapV3 is ISwap {
 
         // Transfer output tokens to user
         IERC20(tokenOut).safeTransfer(msg.sender, amountOut);
+    }
+
+    /**
+     * @dev Extended swap function with token name (ignored in this implementation)
+     */
+    function swap(address tokenIn, address tokenOut, uint256 amountIn, address gasZRC20, uint256 gasFee, string memory)
+        external
+        returns (uint256 amountOut)
+    {
+        // Just delegate to the original function since this implementation doesn't use the token name
+        return swap(tokenIn, tokenOut, amountIn, gasZRC20, gasFee);
     }
 }
