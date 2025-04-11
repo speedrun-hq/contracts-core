@@ -11,6 +11,8 @@ import "./interfaces/IUniswapV3Router.sol";
 import "./interfaces/IGateway.sol";
 import "./interfaces/IZRC20.sol";
 import "./interfaces/ISwap.sol";
+import "./interfaces/IRouter.sol";
+import "./interfaces/IIntent.sol";
 import "./utils/PayloadUtils.sol";
 // import "forge-std/console.sol";
 
@@ -18,7 +20,7 @@ import "./utils/PayloadUtils.sol";
  * @title Router
  * @dev Routes CCTX and handles ZRC20 swaps on ZetaChain
  */
-contract Router is Initializable, UUPSUpgradeable, AccessControlUpgradeable, PausableUpgradeable {
+contract Router is IRouter, Initializable, UUPSUpgradeable, AccessControlUpgradeable, PausableUpgradeable {
     using SafeERC20 for IERC20;
 
     // Role definitions
@@ -176,13 +178,17 @@ contract Router is Initializable, UUPSUpgradeable, AccessControlUpgradeable, Pau
         return amountIn / divisor;
     }
 
-    modifier onlyGateway() {
-        require(msg.sender == gateway, "Only gateway can call this function");
+    modifier onlyGatewayOrIntent() {
+        // Allow calls from gateway or registered intent contracts
+        require(
+            msg.sender == gateway || intentContracts[block.chainid] == msg.sender,
+            "Only gateway or intent contract can call this function"
+        );
         _;
     }
 
     /**
-     * @dev Handles incoming messages from the gateway
+     * @dev Handles incoming messages from the gateway or direct calls from Intent on ZetaChain
      * @param context The message context containing sender and chain information
      * @param zrc20 The ZRC20 token address
      * @param amountWithTip The amount of tokens with tip
@@ -193,8 +199,8 @@ contract Router is Initializable, UUPSUpgradeable, AccessControlUpgradeable, Pau
         address zrc20,
         uint256 amountWithTip,
         bytes calldata payload
-    ) external onlyGateway whenNotPaused {
-        // Verify the call is coming from the intent contract for this chain
+    ) external override onlyGatewayOrIntent whenNotPaused {
+        // Verify the call is coming from a registered intent contract
         require(intentContracts[context.chainID] == context.senderEVM, "Call must be from intent contract");
 
         // Decode intent payload
@@ -259,6 +265,64 @@ contract Router is Initializable, UUPSUpgradeable, AccessControlUpgradeable, Pau
             actualAmount // actual amount to transfer after all costs
         );
 
+        // Check if target chain is the current chain (ZetaChain)
+        if (intentPayload.targetChain == block.chainid) {
+            // Process settlement directly on ZetaChain
+            _processChainsSettlementOnZetaChain(intentContract, targetZRC20, amountWithTipOut, settlementPayload);
+        } else {
+            // Process settlement for connected chains
+            _processChainsSettlementOnConnectedChain(
+                intentContract, targetZRC20, gasZRC20, amountWithTipOut, gasFee, settlementPayload, receiverAddress
+            );
+        }
+
+        emit IntentSettlementForwarded(
+            context.sender, context.chainID, intentPayload.targetChain, zrc20, amountWithTip, tipAfterSwap
+        );
+    }
+
+    /**
+     * @dev Internal function to process settlement directly on ZetaChain
+     * @param intentContract The target Intent contract address
+     * @param zrc20 The ZRC20 token address
+     * @param amount The amount to transfer
+     * @param settlementPayload The encoded settlement payload
+     */
+    function _processChainsSettlementOnZetaChain(
+        address intentContract,
+        address zrc20,
+        uint256 amount,
+        bytes memory settlementPayload
+    ) internal {
+        // Transfer tokens to the target Intent contract
+        IERC20(zrc20).approve(intentContract, amount);
+
+        // Create a MessageContext
+        IIntent.MessageContext memory intentContext = IIntent.MessageContext({sender: address(this)});
+
+        // Call the intent contract directly
+        IIntent(intentContract).onCall(intentContext, settlementPayload);
+    }
+
+    /**
+     * @dev Internal function to process settlement for connected chains
+     * @param intentContract The target Intent contract address
+     * @param targetZRC20 The target ZRC20 token address
+     * @param gasZRC20 The gas ZRC20 token address
+     * @param amount The amount to transfer
+     * @param gasFee The gas fee to pay
+     * @param settlementPayload The encoded settlement payload
+     * @param receiverAddress The receiver address in case of revert
+     */
+    function _processChainsSettlementOnConnectedChain(
+        address intentContract,
+        address targetZRC20,
+        address gasZRC20,
+        uint256 amount,
+        uint256 gasFee,
+        bytes memory settlementPayload,
+        address receiverAddress
+    ) internal {
         // Prepare call options
         IGateway.CallOptions memory callOptions =
             IGateway.CallOptions({gasLimit: withdrawGasLimit, isArbitraryCall: false});
@@ -273,21 +337,12 @@ contract Router is Initializable, UUPSUpgradeable, AccessControlUpgradeable, Pau
         });
 
         // Approve gateway to spend tokens
-        IERC20(targetZRC20).approve(gateway, amountWithTipOut);
+        IERC20(targetZRC20).approve(gateway, amount);
         IERC20(gasZRC20).approve(gateway, gasFee);
 
         // Call gateway to withdraw and call intent contract
         IGateway(gateway).withdrawAndCall(
-            abi.encodePacked(intentContract),
-            amountWithTipOut,
-            targetZRC20,
-            settlementPayload,
-            callOptions,
-            revertOptions
-        );
-
-        emit IntentSettlementForwarded(
-            context.sender, context.chainID, intentPayload.targetChain, zrc20, amountWithTip, tipAfterSwap
+            abi.encodePacked(intentContract), amount, targetZRC20, settlementPayload, callOptions, revertOptions
         );
     }
 

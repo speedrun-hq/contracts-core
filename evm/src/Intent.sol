@@ -7,13 +7,15 @@ import "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol"
 import "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "./interfaces/IGateway.sol";
+import "./interfaces/IRouter.sol";
+import "./interfaces/IIntent.sol";
 import "./utils/PayloadUtils.sol";
 
 /**
  * @title Intent
  * @dev Handles intent-based transfers across chains
  */
-contract Intent is Initializable, UUPSUpgradeable, AccessControlUpgradeable, PausableUpgradeable {
+contract Intent is IIntent, Initializable, UUPSUpgradeable, AccessControlUpgradeable, PausableUpgradeable {
     // Role definitions
     bytes32 public constant PAUSER_ROLE = keccak256("PAUSER_ROLE");
 
@@ -25,6 +27,9 @@ contract Intent is Initializable, UUPSUpgradeable, AccessControlUpgradeable, Pau
 
     // Router contract address on ZetaChain
     address public router;
+
+    // Flag indicating if this contract is deployed on ZetaChain
+    bool public immutable isZetaChain;
 
     // Mapping to track fulfillments
     mapping(bytes32 => address) public fulfillments;
@@ -39,11 +44,6 @@ contract Intent is Initializable, UUPSUpgradeable, AccessControlUpgradeable, Pau
 
     // Mapping to track settlements
     mapping(bytes32 => Settlement) public settlements;
-
-    // Struct for message context
-    struct MessageContext {
-        address sender;
-    }
 
     // Event emitted when a new intent is created
     event IntentInitiated(
@@ -78,7 +78,8 @@ contract Intent is Initializable, UUPSUpgradeable, AccessControlUpgradeable, Pau
     event RouterUpdated(address indexed oldRouter, address indexed newRouter);
 
     /// @custom:oz-upgrades-unsafe-allow constructor
-    constructor() {
+    constructor(bool _isZetaChain) {
+        isZetaChain = _isZetaChain;
         _disableInitializers();
     }
 
@@ -97,8 +98,15 @@ contract Intent is Initializable, UUPSUpgradeable, AccessControlUpgradeable, Pau
     }
 
     // Modifier to restrict function access to gateway only
-    modifier onlyGateway() {
-        require(msg.sender == gateway, "Only gateway can call this function");
+    modifier onlyGatewayOrRouter() {
+        if (isZetaChain) {
+            require(
+                msg.sender == gateway || msg.sender == router,
+                "Only gateway or router can call this function on ZetaChain"
+            );
+        } else {
+            require(msg.sender == gateway, "Only gateway can call this function");
+        }
         _;
     }
 
@@ -171,14 +179,14 @@ contract Intent is Initializable, UUPSUpgradeable, AccessControlUpgradeable, Pau
         uint256 tip,
         uint256 salt
     ) external whenNotPaused returns (bytes32) {
+        // Cannot initiate a transfer to the current chain
+        require(targetChain != block.chainid, "Target chain cannot be the current chain");
+
         // Calculate total amount to transfer (amount + tip)
         uint256 totalAmount = amount + tip;
 
         // Transfer ERC20 tokens from sender to this contract
         IERC20(asset).transferFrom(msg.sender, address(this), totalAmount);
-
-        // Approve gateway to spend the tokens
-        IERC20(asset).approve(gateway, totalAmount);
 
         // Generate intent ID using the computeIntentId function with current chain ID
         bytes32 intentId = computeIntentId(intentCounter, salt, block.chainid);
@@ -188,6 +196,51 @@ contract Intent is Initializable, UUPSUpgradeable, AccessControlUpgradeable, Pau
 
         // Create payload for crosschain transaction
         bytes memory payload = PayloadUtils.encodeIntentPayload(intentId, amount, tip, targetChain, receiver);
+
+        if (isZetaChain) {
+            // ZetaChain as source - direct call to router without going through gateway
+            _initiateFromZetaChain(asset, totalAmount, payload);
+        } else {
+            // Non-ZetaChain source - use gateway
+            _initiateFromConnectedChain(asset, totalAmount, payload);
+        }
+
+        // Emit event
+        emit IntentInitiated(intentId, asset, amount, targetChain, receiver, tip, salt);
+
+        return intentId;
+    }
+
+    /**
+     * @dev Internal function for initiating intent from ZetaChain
+     * @param asset The ERC20 token address (ZRC20)
+     * @param totalAmount Total amount to transfer
+     * @param payload The encoded intent payload
+     */
+    function _initiateFromZetaChain(address asset, uint256 totalAmount, bytes memory payload) internal {
+        // Approve router to spend the tokens
+        IERC20(asset).approve(router, totalAmount);
+
+        // Create ZetaChain message context
+        IGateway.ZetaChainMessageContext memory context = IGateway.ZetaChainMessageContext({
+            sender: abi.encodePacked(address(this)),
+            senderEVM: address(this),
+            chainID: block.chainid
+        });
+
+        // Call router directly
+        IRouter(router).onCall(context, asset, totalAmount, payload);
+    }
+
+    /**
+     * @dev Internal function for initiating intent from connected (non-ZetaChain) networks
+     * @param asset The ERC20 token address
+     * @param totalAmount Total amount to transfer
+     * @param payload The encoded intent payload
+     */
+    function _initiateFromConnectedChain(address asset, uint256 totalAmount, bytes memory payload) internal {
+        // Approve gateway to spend the tokens
+        IERC20(asset).approve(gateway, totalAmount);
 
         // Create revert options
         IGateway.RevertOptions memory revertOptions = IGateway.RevertOptions({
@@ -206,11 +259,6 @@ contract Intent is Initializable, UUPSUpgradeable, AccessControlUpgradeable, Pau
             payload,
             revertOptions
         );
-
-        // Emit event
-        emit IntentInitiated(intentId, asset, amount, targetChain, receiver, tip, salt);
-
-        return intentId;
     }
 
     /**
@@ -302,7 +350,7 @@ contract Intent is Initializable, UUPSUpgradeable, AccessControlUpgradeable, Pau
     function onCall(MessageContext calldata context, bytes calldata message)
         external
         payable
-        onlyGateway
+        onlyGatewayOrRouter
         returns (bytes memory)
     {
         // Verify sender is the router

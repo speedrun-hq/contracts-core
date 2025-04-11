@@ -16,8 +16,11 @@ contract IntentScript is Script {
         address router = vm.envAddress("ROUTER_ADDRESS");
         address gateway = vm.envAddress("GATEWAY_ADDRESS");
 
+        // Check if this is being deployed on ZetaChain
+        bool isZetaChain = vm.envOr("IS_ZETACHAIN", false);
+
         // Deploy implementation
-        Intent implementation = new Intent();
+        Intent implementation = new Intent(isZetaChain);
 
         // Prepare initialization data
         bytes memory initData = abi.encodeWithSelector(Intent.initialize.selector, gateway, router);
@@ -33,6 +36,7 @@ contract IntentScript is Script {
         console2.log("Initialized with:");
         console2.log("- Gateway:", gateway);
         console2.log("- Router:", router);
+        console2.log("- IsZetaChain:", isZetaChain);
 
         vm.stopBroadcast();
     }

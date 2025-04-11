@@ -10,12 +10,17 @@ contract IntentImplementationScript is Script {
     function run() public {
         uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
 
+        // Default to false for non-ZetaChain deployments
+        // Set IS_ZETACHAIN environment variable to "true" for ZetaChain deployments
+        bool isZetaChain = vm.envOr("IS_ZETACHAIN", false);
+
         vm.startBroadcast(deployerPrivateKey);
 
-        // Deploy only the implementation contract
-        Intent implementation = new Intent();
+        // Deploy only the implementation contract with isZetaChain parameter
+        Intent implementation = new Intent(isZetaChain);
 
         console2.log("Intent implementation deployed to:", address(implementation));
+        console2.log("isZetaChain value:", isZetaChain);
 
         vm.stopBroadcast();
     }
