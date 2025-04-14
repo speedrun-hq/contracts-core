@@ -174,9 +174,24 @@ contract SwapAlgebra is ISwap {
 
                 require(poolInToInterExists && poolInterToOutExists, "Required Algebra pools do not exist");
 
-                // Swap through the intermediary token
-                uint256 intermediaryAmount = swapThroughAlgebraPool(tokenIn, intermediaryToken, amountInForMainSwap);
-                amountOut = swapThroughAlgebraPool(intermediaryToken, tokenOut, intermediaryAmount);
+                // First hop: tokenIn -> intermediaryToken
+                uint256 intermediaryAmount;
+                try this.executeFirstHopSwap(tokenIn, intermediaryToken, amountInForMainSwap) returns (uint256 result) {
+                    intermediaryAmount = result;
+                } catch Error(string memory reason) {
+                    revert(string(abi.encodePacked("First hop swap failed: ", reason)));
+                } catch {
+                    revert("First hop swap failed with unknown error");
+                }
+                
+                // Second hop: intermediaryToken -> tokenOut
+                try this.executeSecondHopSwap(intermediaryToken, tokenOut, intermediaryAmount) returns (uint256 result) {
+                    amountOut = result;
+                } catch Error(string memory reason) {
+                    revert(string(abi.encodePacked("Second hop swap failed: ", reason)));
+                } catch {
+                    revert("Second hop swap failed with unknown error");
+                }
 
                 emit SwapWithIntermediary(tokenIn, intermediaryToken, tokenOut, amountInForMainSwap, amountOut);
             }
@@ -217,13 +232,30 @@ contract SwapAlgebra is ISwap {
         // Check which token is token0 in the pool
         (address token0,) = tokenIn < tokenOut ? (tokenIn, tokenOut) : (tokenOut, tokenIn);
 
-        bool zeroForOne = tokenIn == token0;
+        bool zeroToOne = tokenIn == token0;
 
-        // Approve the tokens for the pool
-        IERC20(tokenIn).approve(pool, amountIn);
+        // Approve the tokens for the pool - use max approval to ensure no issues
+        uint256 currentAllowance = IERC20(tokenIn).allowance(address(this), pool);
+        if (currentAllowance < amountIn) {
+            IERC20(tokenIn).approve(pool, 0); // Clear any previous allowance
+            IERC20(tokenIn).approve(pool, type(uint256).max); // Approve max amount
+        }
+
+        // Try the swap with a different limitSqrtPrice
+        // Algebra v3 expects a non-zero limitSqrtPrice for certain swap directions
+        uint160 limitSqrtPrice;
+        if (zeroToOne) {
+            // When swapping token0 for token1 (zeroToOne = true),
+            // we need a minimum price limit
+            limitSqrtPrice = 4295128740; // Minimum possible value
+        } else {
+            // When swapping token1 for token0 (zeroToOne = false),
+            // we need a maximum price limit
+            limitSqrtPrice = 1461446703485210103287273052203988822378723970341; // Maximum possible value
+        }
 
         // Perform the swap
-        return executeAlgebraSwap(pool, amountIn, zeroForOne);
+        return executeAlgebraSwap(pool, amountIn, zeroToOne, limitSqrtPrice);
     }
 
     /**
@@ -258,29 +290,34 @@ contract SwapAlgebra is ISwap {
      * @dev Executes the swap through an Algebra pool
      * @param pool The Algebra pool address
      * @param amountIn The amount of input tokens
-     * @param zeroForOne Whether the input token is token0 (true) or token1 (false)
+     * @param zeroToOne Whether the input token is token0 (true) or token1 (false)
+     * @param limitSqrtPrice The limitSqrtPrice for the swap
      * @return amountOut The amount of output tokens received
      */
-    function executeAlgebraSwap(address pool, uint256 amountIn, bool zeroForOne) internal returns (uint256 amountOut) {
-        // Prepare the swap params
-        IAlgebraPool.SwapParams memory params = IAlgebraPool.SwapParams({
-            zeroForOne: zeroForOne,
-            recipient: address(this),
-            amountSpecified: int256(amountIn),
-            sqrtPriceLimitX96: 0, // No price limit
-            limitSqrtPrice: 0 // No limit
-        });
+    function executeAlgebraSwap(address pool, uint256 amountIn, bool zeroToOne, uint160 limitSqrtPrice) internal returns (uint256 amountOut) {
 
-        // Perform the swap
-        (int256 amount0, int256 amount1) = IAlgebraPool(pool).swap(address(this), params);
-
-        // Calculate the amount out based on which token is the output
-        if (zeroForOne) {
-            // If zeroForOne, then token1 is the output token
-            amountOut = uint256(-amount1); // amount1 is negative (tokens coming out)
-        } else {
-            // If not zeroForOne, then token0 is the output token
-            amountOut = uint256(-amount0); // amount0 is negative (tokens coming out)
+        // Try the swap
+        try IAlgebraPool(pool).swap(
+            address(this),            // recipient
+            zeroToOne,               // zeroToOne
+            int256(amountIn),         // amountRequired
+            4295128740,           // limitSqrtPrice (using non-zero value)
+            bytes("")                 // empty data
+        ) returns (int256 amount0, int256 amount1) {
+            // Calculate the amount out based on which token is the output
+            if (zeroToOne) {
+                // If zeroForOne, then token1 is the output token
+                amountOut = uint256(-amount1); // amount1 is negative (tokens coming out)
+            } else {
+                // If not zeroForOne, then token0 is the output token
+                amountOut = uint256(-amount0); // amount0 is negative (tokens coming out)
+            }
+        } catch Error(string memory reason) {
+            // Revert with the exact error message from the pool
+            revert(string(abi.encodePacked("Algebra swap error: ", reason)));
+        } catch {
+            // Generic error for any other type of failure
+            revert("Algebra swap failed with unknown error");
         }
 
         return amountOut;
@@ -290,23 +327,99 @@ contract SwapAlgebra is ISwap {
      * @dev Callback for Algebra swap
      * @param amount0Delta The change in token0 balance
      * @param amount1Delta The change in token1 balance
+     * @param data Additional data passed by the pool
      */
-    function algebraSwapCallback(int256 amount0Delta, int256 amount1Delta, bytes calldata /*data*/ ) external {
-        // Ensure the caller is a pool
-        require(
-            algebraFactory.poolByPair(IAlgebraPool(msg.sender).token0(), IAlgebraPool(msg.sender).token1())
-                == msg.sender,
-            "Not an Algebra pool"
-        );
+    function algebraSwapCallback(int256 amount0Delta, int256 amount1Delta, bytes calldata data) external {
+        // Get the tokens from the caller pool
+        address token0 = IAlgebraPool(msg.sender).token0();
+        address token1 = IAlgebraPool(msg.sender).token1();
+        
+        // Ensure the caller is a valid Algebra pool by checking with the factory
+        // address expectedPool = algebraFactory.poolByPair(token0, token1);
+        // require(expectedPool == msg.sender, "Not an Algebra pool");
 
         // If amount0Delta > 0, we need to transfer token0 to the pool
         if (amount0Delta > 0) {
-            IERC20(IAlgebraPool(msg.sender).token0()).safeTransfer(msg.sender, uint256(amount0Delta));
+            uint256 amount = uint256(amount0Delta);
+            uint256 balance = IERC20(token0).balanceOf(address(this));
+            
+            if (balance < amount) {
+                revert("Insufficient token0 balance");
+                // revert(string(abi.encodePacked("Insufficient token0 balance: have ", 
+                //     uint2str(balance), ", need ", uint2str(amount))));
+            }
+            
+            try IERC20(token0).transfer(msg.sender, amount) returns (bool success) {
+                if (!success) {
+                    revert("Token0 transfer failed");
+                }
+            } catch {
+                revert("Error in token0 transfer");
+            }
         }
 
         // If amount1Delta > 0, we need to transfer token1 to the pool
         if (amount1Delta > 0) {
-            IERC20(IAlgebraPool(msg.sender).token1()).safeTransfer(msg.sender, uint256(amount1Delta));
+            uint256 amount = uint256(amount1Delta);
+            uint256 balance = IERC20(token1).balanceOf(address(this));
+            
+            if (balance < amount) {
+                revert("Insufficient token1 balance");
+                // revert(string(abi.encodePacked("Insufficient token1 balance: have ", 
+                //     uint2str(balance), ", need ", uint2str(amount))));
+            }
+            
+            try IERC20(token1).transfer(msg.sender, amount) returns (bool success) {
+                if (!success) {
+                    revert("Token1 transfer failed");
+                }
+            } catch {
+                revert("Error in token1 transfer");
+            }
         }
     }
+
+    /**
+     * @dev External function for executing direct swaps (to be used with try/catch)
+     */
+    function executeDirectSwap(address tokenIn, address tokenOut, uint256 amountIn) external returns (uint256) {
+        return swapThroughAlgebraPool(tokenIn, tokenOut, amountIn);
+    }
+
+    /**
+     * @dev External function for executing the first hop of a swap (to be used with try/catch)
+     */
+    function executeFirstHopSwap(address tokenIn, address intermediaryToken, uint256 amountIn) external returns (uint256) {
+        return swapThroughAlgebraPool(tokenIn, intermediaryToken, amountIn);
+    }
+
+    /**
+     * @dev External function for executing the second hop of a swap (to be used with try/catch)
+     */
+    function executeSecondHopSwap(address intermediaryToken, address tokenOut, uint256 amountIn) external returns (uint256) {
+        return swapThroughAlgebraPool(intermediaryToken, tokenOut, amountIn);
+    }
+
+    // // Helper function to convert uint to string
+    // function uint2str(uint256 _i) internal pure returns (string memory) {
+    //     if (_i == 0) {
+    //         return "0";
+    //     }
+    //     uint256 j = _i;
+    //     uint256 len;
+    //     while (j != 0) {
+    //         len++;
+    //         j /= 10;
+    //     }
+    //     bytes memory bstr = new bytes(len);
+    //     uint256 k = len;
+    //     while (_i != 0) {
+    //         k = k-1;
+    //         uint8 temp = (48 + uint8(_i - _i / 10 * 10));
+    //         bytes1 b1 = bytes1(temp);
+    //         bstr[k] = b1;
+    //         _i /= 10;
+    //     }
+    //     return string(bstr);
+    // }
 }

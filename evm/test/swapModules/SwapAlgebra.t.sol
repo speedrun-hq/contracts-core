@@ -114,15 +114,21 @@ contract MockAlgebraPool is IAlgebraPool {
         factory = _factory;
     }
 
-    function swap(address, SwapParams memory params) external returns (int256 amount0, int256 amount1) {
+    function swap(
+        address recipient, 
+        bool zeroToOne, 
+        int256 amountRequired, 
+        uint160 limitSqrtPrice, 
+        bytes calldata data
+    ) external returns (int256 amount0, int256 amount1) {
         // Determine which token is being swapped in
-        address tokenOut = params.zeroForOne ? token1 : token0;
+        address tokenOut = zeroToOne ? token1 : token0;
 
         // Calculate the amount in (positive) and out (negative)
-        uint256 amountIn = uint256(params.amountSpecified);
+        uint256 amountIn = uint256(amountRequired);
 
         // Mock 1:1 swap for testing
-        if (params.zeroForOne) {
+        if (zeroToOne) {
             amount0 = int256(amountIn); // Positive (tokens in)
             amount1 = -int256(amountIn); // Negative (tokens out)
         } else {
@@ -131,14 +137,14 @@ contract MockAlgebraPool is IAlgebraPool {
         }
 
         // Call the callback to get the input tokens
-        SwapAlgebra(msg.sender).algebraSwapCallback(amount0, amount1, "");
+        SwapAlgebra(msg.sender).algebraSwapCallback(amount0, amount1, data);
 
         // Check output token balance
         uint256 outTokenBalance = IERC20(tokenOut).balanceOf(address(this));
         require(outTokenBalance >= amountIn, "Insufficient output token balance");
 
         // Transfer output tokens to the recipient
-        IERC20(tokenOut).transfer(params.recipient, amountIn);
+        IERC20(tokenOut).transfer(recipient, amountIn);
     }
 }
 
