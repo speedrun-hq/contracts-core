@@ -3,6 +3,7 @@ pragma solidity 0.8.26;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
 import "../interfaces/ISwap.sol";
 import "../interfaces/IAlgebraPool.sol";
 import "../interfaces/IAlgebraFactory.sol";
@@ -20,24 +21,27 @@ import "../interfaces/IUniswapV2Router02.sol";
  * 3. The remaining tokenIn amount is swapped to tokenOut using the Algebra pool,
  *    potentially routing through an intermediary token if a direct pool doesn't exist
  */
-contract SwapAlgebra is ISwap {
+contract SwapAlgebra is ISwap, Ownable {
     using SafeERC20 for IERC20;
+
+    uint160 internal constant MIN_SQRT_RATIO = 4295128739;
+    uint160 internal constant MAX_SQRT_RATIO = 1461446703485210103287273052203988822378723970342;
 
     // Algebra Factory address
     IAlgebraFactory public immutable algebraFactory;
+
     // Uniswap V2 Router address for gas fee token swaps
     IUniswapV2Router02 public immutable uniswapV2Router;
+
     // WZETA address on ZetaChain
     address public immutable wzeta;
 
     // Mapping from token name to intermediary token address
     mapping(string => address) public intermediaryTokens;
 
-    // Token name to pair existence check
-    mapping(address => mapping(address => bool)) private poolExistsCache;
-
     // Events
     event IntermediaryTokenSet(string indexed tokenName, address indexed tokenAddress);
+
     event SwapWithIntermediary(
         address indexed tokenIn,
         address indexed intermediary,
@@ -46,7 +50,7 @@ contract SwapAlgebra is ISwap {
         uint256 amountOut
     );
 
-    constructor(address _algebraFactory, address _uniswapV2Router, address _wzeta) {
+    constructor(address _algebraFactory, address _uniswapV2Router, address _wzeta) Ownable(msg.sender) {
         require(_algebraFactory != address(0), "Invalid Algebra factory address");
         require(_uniswapV2Router != address(0), "Invalid Uniswap V2 router address");
         require(_wzeta != address(0), "Invalid WZETA address");
@@ -61,7 +65,7 @@ contract SwapAlgebra is ISwap {
      * @param tokenName The name of the token
      * @param intermediaryToken The address of the intermediary token
      */
-    function setIntermediaryToken(string calldata tokenName, address intermediaryToken) external {
+    function setIntermediaryToken(string calldata tokenName, address intermediaryToken) external onlyOwner {
         require(intermediaryToken != address(0), "Invalid intermediary token address");
         intermediaryTokens[tokenName] = intermediaryToken;
         emit IntermediaryTokenSet(tokenName, intermediaryToken);
@@ -73,15 +77,62 @@ contract SwapAlgebra is ISwap {
      * @param tokenB The second token address
      * @return Whether a pool exists
      */
-    function algebraPoolExists(address tokenA, address tokenB) public view returns (bool) {
-        // Check cache first
-        if (poolExistsCache[tokenA][tokenB]) {
-            return true;
-        }
-
+    function algebraPoolExists(address tokenA, address tokenB) internal view returns (bool) {
         // Check if pool exists in Algebra factory
         address pool = algebraFactory.poolByPair(tokenA, tokenB);
         return pool != address(0);
+    }
+
+    /**
+     * @dev Calculates the amount of input tokens needed to get the exact amount of gas tokens
+     * @param tokenIn The input token address
+     * @param gasZRC20 The gas token address
+     * @param gasFee The amount of gas tokens needed
+     * @return The amount of input tokens needed
+     */
+    function getAmountInForGasFee(address tokenIn, address gasZRC20, uint256 gasFee) internal view returns (uint256) {
+        // Tokens in the path
+        address[] memory path;
+
+        // If the gas token is not WZETA, we need to route through WZETA
+        if (gasZRC20 != wzeta) {
+            path = new address[](3);
+            path[0] = tokenIn;
+            path[1] = wzeta;
+            path[2] = gasZRC20;
+        } else {
+            path = new address[](2);
+            path[0] = tokenIn;
+            path[1] = gasZRC20;
+        }
+
+        // Get the amount of input tokens needed to get the exact amount of gas tokens
+        uint256[] memory amounts = uniswapV2Router.getAmountsIn(gasFee, path);
+        return amounts[0];
+    }
+
+    /// @notice Returns a valid `limitSqrtPrice` just beyond the current price
+    /// @param zeroForOne If true, token0 → token1; else token1 → token0
+    function getValidLimitSqrtPrice(bool zeroForOne) internal pure returns (uint160) {
+        unchecked {
+            if (zeroForOne) {
+                return MIN_SQRT_RATIO + 1;
+            } else {
+                return MAX_SQRT_RATIO - 1;
+            }
+        }
+    }
+
+    /**
+     * @dev Compatibility function for the ISwap interface (uses WZETA as intermediary by default)
+     */
+    function swap(address tokenIn, address tokenOut, uint256 amountIn, address gasZRC20, uint256 gasFee)
+        external
+        returns (uint256 amountOut)
+    {
+        // Use a default empty string for tokenName, which will rely on direct pools or default intermediary
+        string memory emptyString = "";
+        return swap(tokenIn, tokenOut, amountIn, gasZRC20, gasFee, emptyString);
     }
 
     /**
@@ -174,8 +225,10 @@ contract SwapAlgebra is ISwap {
 
                 require(poolInToInterExists && poolInterToOutExists, "Required Algebra pools do not exist");
 
-                // Swap through the intermediary token
+                // First hop: tokenIn -> intermediaryToken
                 uint256 intermediaryAmount = swapThroughAlgebraPool(tokenIn, intermediaryToken, amountInForMainSwap);
+
+                // Second hop: intermediaryToken -> tokenOut
                 amountOut = swapThroughAlgebraPool(intermediaryToken, tokenOut, intermediaryAmount);
 
                 emit SwapWithIntermediary(tokenIn, intermediaryToken, tokenOut, amountInForMainSwap, amountOut);
@@ -186,18 +239,6 @@ contract SwapAlgebra is ISwap {
         }
 
         return amountOut;
-    }
-
-    /**
-     * @dev Compatibility function for the ISwap interface (uses WZETA as intermediary by default)
-     */
-    function swap(address tokenIn, address tokenOut, uint256 amountIn, address gasZRC20, uint256 gasFee)
-        external
-        returns (uint256 amountOut)
-    {
-        // Use a default empty string for tokenName, which will rely on direct pools or default intermediary
-        string memory emptyString = "";
-        return swap(tokenIn, tokenOut, amountIn, gasZRC20, gasFee, emptyString);
     }
 
     /**
@@ -214,73 +255,57 @@ contract SwapAlgebra is ISwap {
         address pool = algebraFactory.poolByPair(tokenIn, tokenOut);
         require(pool != address(0), "Algebra pool does not exist");
 
-        // Check which token is token0 in the pool
-        (address token0,) = tokenIn < tokenOut ? (tokenIn, tokenOut) : (tokenOut, tokenIn);
+        address token0 = IAlgebraPool(pool).token0();
+        bool zeroToOne = tokenIn == token0;
 
-        bool zeroForOne = tokenIn == token0;
-
-        // Approve the tokens for the pool
-        IERC20(tokenIn).approve(pool, amountIn);
-
-        // Perform the swap
-        return executeAlgebraSwap(pool, amountIn, zeroForOne);
-    }
-
-    /**
-     * @dev Calculates the amount of input tokens needed to get the exact amount of gas tokens
-     * @param tokenIn The input token address
-     * @param gasZRC20 The gas token address
-     * @param gasFee The amount of gas tokens needed
-     * @return The amount of input tokens needed
-     */
-    function getAmountInForGasFee(address tokenIn, address gasZRC20, uint256 gasFee) internal view returns (uint256) {
-        // Tokens in the path
-        address[] memory path;
-
-        // If the gas token is not WZETA, we need to route through WZETA
-        if (gasZRC20 != wzeta) {
-            path = new address[](3);
-            path[0] = tokenIn;
-            path[1] = wzeta;
-            path[2] = gasZRC20;
-        } else {
-            path = new address[](2);
-            path[0] = tokenIn;
-            path[1] = gasZRC20;
+        // Approve the tokens for the pool - use max approval to ensure no issues
+        uint256 currentAllowance = IERC20(tokenIn).allowance(address(this), pool);
+        if (currentAllowance < amountIn) {
+            IERC20(tokenIn).approve(pool, 0); // Clear any previous allowance
+            IERC20(tokenIn).approve(pool, type(uint256).max); // Approve max amount
         }
 
-        // Get the amount of input tokens needed to get the exact amount of gas tokens
-        uint256[] memory amounts = uniswapV2Router.getAmountsIn(gasFee, path);
-        return amounts[0];
+        // (uint160 currentPrice, , , , , , ) = IAlgebraPool(pool).globalState();
+        uint160 limitSqrtPrice = getValidLimitSqrtPrice(zeroToOne);
+
+        // Perform the swap
+        return executeAlgebraSwap(pool, amountIn, zeroToOne, limitSqrtPrice);
     }
 
     /**
      * @dev Executes the swap through an Algebra pool
      * @param pool The Algebra pool address
      * @param amountIn The amount of input tokens
-     * @param zeroForOne Whether the input token is token0 (true) or token1 (false)
+     * @param zeroToOne Whether the input token is token0 (true) or token1 (false)
+     * @param limitSqrtPrice The limitSqrtPrice for the swap
      * @return amountOut The amount of output tokens received
      */
-    function executeAlgebraSwap(address pool, uint256 amountIn, bool zeroForOne) internal returns (uint256 amountOut) {
-        // Prepare the swap params
-        IAlgebraPool.SwapParams memory params = IAlgebraPool.SwapParams({
-            zeroForOne: zeroForOne,
-            recipient: address(this),
-            amountSpecified: int256(amountIn),
-            sqrtPriceLimitX96: 0, // No price limit
-            limitSqrtPrice: 0 // No limit
-        });
-
-        // Perform the swap
-        (int256 amount0, int256 amount1) = IAlgebraPool(pool).swap(address(this), params);
-
-        // Calculate the amount out based on which token is the output
-        if (zeroForOne) {
-            // If zeroForOne, then token1 is the output token
-            amountOut = uint256(-amount1); // amount1 is negative (tokens coming out)
-        } else {
-            // If not zeroForOne, then token0 is the output token
-            amountOut = uint256(-amount0); // amount0 is negative (tokens coming out)
+    function executeAlgebraSwap(address pool, uint256 amountIn, bool zeroToOne, uint160 limitSqrtPrice)
+        internal
+        returns (uint256 amountOut)
+    {
+        // Try the swap
+        try IAlgebraPool(pool).swap(
+            address(this), // recipient
+            zeroToOne, // zeroToOne
+            int256(amountIn), // amountRequired
+            limitSqrtPrice,
+            bytes("") // empty data
+        ) returns (int256 amount0, int256 amount1) {
+            // Calculate the amount out based on which token is the output
+            if (zeroToOne) {
+                // If zeroForOne, then token1 is the output token
+                amountOut = uint256(-amount1); // amount1 is negative (tokens coming out)
+            } else {
+                // If not zeroForOne, then token0 is the output token
+                amountOut = uint256(-amount0); // amount0 is negative (tokens coming out)
+            }
+        } catch Error(string memory reason) {
+            // Revert with the exact error message from the pool
+            revert(string(abi.encodePacked("Algebra swap error: ", reason)));
+        } catch {
+            // Generic error for any other type of failure
+            revert("Algebra swap failed with unknown error");
         }
 
         return amountOut;
@@ -291,22 +316,37 @@ contract SwapAlgebra is ISwap {
      * @param amount0Delta The change in token0 balance
      * @param amount1Delta The change in token1 balance
      */
-    function algebraSwapCallback(int256 amount0Delta, int256 amount1Delta, bytes calldata /*data*/ ) external {
-        // Ensure the caller is a pool
-        require(
-            algebraFactory.poolByPair(IAlgebraPool(msg.sender).token0(), IAlgebraPool(msg.sender).token1())
-                == msg.sender,
-            "Not an Algebra pool"
-        );
+    function algebraSwapCallback(int256 amount0Delta, int256 amount1Delta, bytes calldata) external {
+        // Get the tokens from the caller pool
+        address token0 = IAlgebraPool(msg.sender).token0();
+        address token1 = IAlgebraPool(msg.sender).token1();
+
+        // Ensure the caller is a valid Algebra pool by checking with the factory
+        // address expectedPool = algebraFactory.poolByPair(token0, token1);
+        // require(expectedPool == msg.sender, "Not an Algebra pool");
 
         // If amount0Delta > 0, we need to transfer token0 to the pool
         if (amount0Delta > 0) {
-            IERC20(IAlgebraPool(msg.sender).token0()).safeTransfer(msg.sender, uint256(amount0Delta));
+            uint256 amount = uint256(amount0Delta);
+            uint256 balance = IERC20(token0).balanceOf(address(this));
+
+            if (balance < amount) {
+                revert("Insufficient token0 balance");
+            }
+
+            IERC20(token0).safeTransfer(msg.sender, amount);
         }
 
         // If amount1Delta > 0, we need to transfer token1 to the pool
         if (amount1Delta > 0) {
-            IERC20(IAlgebraPool(msg.sender).token1()).safeTransfer(msg.sender, uint256(amount1Delta));
+            uint256 amount = uint256(amount1Delta);
+            uint256 balance = IERC20(token1).balanceOf(address(this));
+
+            if (balance < amount) {
+                revert("Insufficient token1 balance");
+            }
+
+            IERC20(token1).safeTransfer(msg.sender, amount);
         }
     }
 }
