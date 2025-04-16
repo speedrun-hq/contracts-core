@@ -35,4 +35,27 @@ interface IAlgebraPool {
      * @return The address of token1
      */
     function token1() external view returns (address);
+
+    /**
+     * @dev Returns the global state of the pool
+     * @return price The current sqrt price (Q64.96)
+     * @return tick The current tick
+     * @return fee The current fee
+     * @return timepointIndex The index of the last written timepoint
+     * @return communityFeeToken0 Community fee for token0 (in hundredths of a bip)
+     * @return communityFeeToken1 Community fee for token1 (in hundredths of a bip)
+     * @return unlocked Whether the pool is unlocked for swapping
+     */
+    function globalState()
+        external
+        view
+        returns (
+            uint160 price,
+            int24 tick,
+            uint16 fee,
+            uint16 timepointIndex,
+            uint8 communityFeeToken0,
+            uint8 communityFeeToken1,
+            bool unlocked
+        );
 }
