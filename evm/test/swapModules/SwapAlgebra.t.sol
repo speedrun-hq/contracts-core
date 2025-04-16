@@ -8,6 +8,10 @@ import {IAlgebraFactory} from "../../src/interfaces/IAlgebraFactory.sol";
 import {IAlgebraPool} from "../../src/interfaces/IAlgebraPool.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
+
+// Custom error from Ownable contract
+error OwnableUnauthorizedAccount(address account);
 
 contract MockERC20 is ERC20 {
     constructor(string memory name, string memory symbol) ERC20(name, symbol) {}
@@ -114,17 +118,26 @@ contract MockAlgebraPool is IAlgebraPool {
         factory = _factory;
     }
 
-    function globalState() external view returns (uint160 price, int24 tick, uint16 fee, uint16 timepointIndex, uint8 communityFeeToken0, uint8 communityFeeToken1, bool unlocked) {
+    function globalState()
+        external
+        view
+        returns (
+            uint160 price,
+            int24 tick,
+            uint16 fee,
+            uint16 timepointIndex,
+            uint8 communityFeeToken0,
+            uint8 communityFeeToken1,
+            bool unlocked
+        )
+    {
         return (0, 0, 0, 0, 0, 0, true);
     }
 
-    function swap(
-        address recipient, 
-        bool zeroToOne, 
-        int256 amountRequired, 
-        uint160 limitSqrtPrice, 
-        bytes calldata data
-    ) external returns (int256 amount0, int256 amount1) {
+    function swap(address recipient, bool zeroToOne, int256 amountRequired, uint160 limitSqrtPrice, bytes calldata data)
+        external
+        returns (int256 amount0, int256 amount1)
+    {
         // Determine which token is being swapped in
         address tokenOut = zeroToOne ? token1 : token0;
 
@@ -196,6 +209,7 @@ contract SwapAlgebraTest is Test {
     MockERC20 public gasToken;
     MockERC20 public intermediaryToken;
     address public user;
+    address public nonOwner;
     uint256 public constant AMOUNT = 1000 ether;
     uint256 public constant GAS_FEE = 100 ether;
     string public constant TOKEN_NAME = "TEST_TOKEN";
@@ -222,6 +236,7 @@ contract SwapAlgebraTest is Test {
 
         // Setup user
         user = makeAddr("user");
+        nonOwner = makeAddr("nonOwner");
         inputToken.mint(user, AMOUNT * 10);
         vm.prank(user);
         inputToken.approve(address(swapAlgebra), AMOUNT * 10);
@@ -381,5 +396,20 @@ contract SwapAlgebraTest is Test {
         vm.prank(user);
         vm.expectRevert("Required Algebra pools do not exist");
         swapAlgebra.swap(address(inputToken), address(outputToken), AMOUNT, address(gasToken), GAS_FEE, TOKEN_NAME);
+    }
+
+    function test_OnlyOwnerCanSetIntermediaryToken() public {
+        // Owner can set the intermediary token
+        swapAlgebra.setIntermediaryToken(TOKEN_NAME, address(intermediaryToken));
+        assertEq(
+            swapAlgebra.intermediaryTokens(TOKEN_NAME),
+            address(intermediaryToken),
+            "Owner should be able to set intermediary token"
+        );
+
+        // Non-owner cannot set the intermediary token
+        vm.prank(nonOwner);
+        vm.expectRevert(abi.encodeWithSelector(OwnableUnauthorizedAccount.selector, nonOwner));
+        swapAlgebra.setIntermediaryToken("ANOTHER_TOKEN", address(outputToken));
     }
 }

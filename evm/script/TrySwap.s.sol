@@ -22,6 +22,6 @@ contract SetIntentScript is Script {
             "USDC"
         );
 
-        console2.log("Amount out:", amountOut); 
+        console2.log("Amount out:", amountOut);
     }
 }
