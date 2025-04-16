@@ -43,7 +43,20 @@ contract MockSwapModule is ISwap {
         external
         returns (uint256 amountOut)
     {
-        // Just delegate to the original function since this implementation doesn't use the token name
-        return this.swap(tokenIn, tokenOut, amountIn, gasZRC20, gasFee);
+        // Transfer tokens from sender to this contract
+        IERC20(tokenIn).transferFrom(msg.sender, address(this), amountIn);
+
+        // Calculate amount out based on slippage settings
+        uint256 slippageCost = (amountIn * slippage) / 10000; // slippage in basis points (e.g., 100 = 1%)
+
+        require(amountIn > slippageCost + gasFee, "Amount insufficient to cover costs after tip");
+
+        amountOut = amountIn - slippageCost - gasFee;
+
+        // Transfer tokens back to the sender
+        IERC20(tokenOut).transfer(msg.sender, amountOut);
+        IERC20(gasZRC20).transfer(msg.sender, gasFee);
+
+        return amountOut;
     }
 }

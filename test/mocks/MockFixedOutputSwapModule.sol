@@ -39,7 +39,16 @@ contract MockFixedOutputSwapModule is ISwap {
         external
         returns (uint256 amountOut)
     {
-        // Just delegate to the original function since this implementation doesn't use the token name
-        return this.swap(tokenIn, tokenOut, amountIn, gasZRC20, gasFee);
+        // Transfer tokens from sender to this contract
+        IERC20(tokenIn).transferFrom(msg.sender, address(this), amountIn);
+
+        // Just return the fixed output amount, ignoring all calculations
+        amountOut = fixedOutputAmount;
+
+        // Transfer tokens back to the sender
+        IERC20(tokenOut).transfer(msg.sender, amountOut);
+        IERC20(gasZRC20).transfer(msg.sender, gasFee);
+
+        return amountOut;
     }
 }
