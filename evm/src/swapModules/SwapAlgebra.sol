@@ -23,24 +23,28 @@ import "../interfaces/IUniswapV2Router02.sol";
 contract SwapAlgebra is ISwap {
     using SafeERC20 for IERC20;
 
+    uint160 internal constant MIN_SQRT_RATIO = 4295128739;
+    uint160 internal constant MAX_SQRT_RATIO =
+        1461446703485210103287273052203988822378723970342;
+
     // Algebra Factory address
     IAlgebraFactory public immutable algebraFactory;
+
     // Uniswap V2 Router address for gas fee token swaps
     IUniswapV2Router02 public immutable uniswapV2Router;
+
     // WZETA address on ZetaChain
     address public immutable wzeta;
 
     // Mapping from token name to intermediary token address
     mapping(string => address) public intermediaryTokens;
 
-    // Token name to pair existence check
-    mapping(address => mapping(address => bool)) private poolExistsCache;
-
     // Events
     event IntermediaryTokenSet(
         string indexed tokenName,
         address indexed tokenAddress
     );
+
     event SwapWithIntermediary(
         address indexed tokenIn,
         address indexed intermediary,
@@ -95,15 +99,71 @@ contract SwapAlgebra is ISwap {
     function algebraPoolExists(
         address tokenA,
         address tokenB
-    ) public view returns (bool) {
-        // Check cache first
-        if (poolExistsCache[tokenA][tokenB]) {
-            return true;
-        }
-
+    ) internal view returns (bool) {
         // Check if pool exists in Algebra factory
         address pool = algebraFactory.poolByPair(tokenA, tokenB);
         return pool != address(0);
+    }
+
+    /**
+     * @dev Calculates the amount of input tokens needed to get the exact amount of gas tokens
+     * @param tokenIn The input token address
+     * @param gasZRC20 The gas token address
+     * @param gasFee The amount of gas tokens needed
+     * @return The amount of input tokens needed
+     */
+    function getAmountInForGasFee(
+        address tokenIn,
+        address gasZRC20,
+        uint256 gasFee
+    ) internal view returns (uint256) {
+        // Tokens in the path
+        address[] memory path;
+
+        // If the gas token is not WZETA, we need to route through WZETA
+        if (gasZRC20 != wzeta) {
+            path = new address[](3);
+            path[0] = tokenIn;
+            path[1] = wzeta;
+            path[2] = gasZRC20;
+        } else {
+            path = new address[](2);
+            path[0] = tokenIn;
+            path[1] = gasZRC20;
+        }
+
+        // Get the amount of input tokens needed to get the exact amount of gas tokens
+        uint256[] memory amounts = uniswapV2Router.getAmountsIn(gasFee, path);
+        return amounts[0];
+    }
+
+    /// @notice Returns a valid `limitSqrtPrice` just beyond the current price
+    /// @param zeroForOne If true, token0 → token1; else token1 → token0
+    function getValidLimitSqrtPrice(
+        bool zeroForOne
+    ) internal pure returns (uint160) {
+        unchecked {
+            if (zeroForOne) {
+                return MIN_SQRT_RATIO + 1;
+            } else {
+                return MAX_SQRT_RATIO - 1;
+            }
+        }
+    }
+
+    /**
+     * @dev Compatibility function for the ISwap interface (uses WZETA as intermediary by default)
+     */
+    function swap(
+        address tokenIn,
+        address tokenOut,
+        uint256 amountIn,
+        address gasZRC20,
+        uint256 gasFee
+    ) external returns (uint256 amountOut) {
+        // Use a default empty string for tokenName, which will rely on direct pools or default intermediary
+        string memory emptyString = "";
+        return swap(tokenIn, tokenOut, amountIn, gasZRC20, gasFee, emptyString);
     }
 
     /**
@@ -227,43 +287,18 @@ contract SwapAlgebra is ISwap {
                 );
 
                 // First hop: tokenIn -> intermediaryToken
-                uint256 intermediaryAmount;
-                try
-                    this.executeFirstHopSwap(
-                        tokenIn,
-                        intermediaryToken,
-                        amountInForMainSwap
-                    )
-                returns (uint256 result) {
-                    intermediaryAmount = result;
-                } catch Error(string memory reason) {
-                    revert(
-                        string(
-                            abi.encodePacked("First hop swap failed: ", reason)
-                        )
-                    );
-                } catch {
-                    revert("First hop swap failed with unknown error");
-                }
+                uint256 intermediaryAmount = swapThroughAlgebraPool(
+                    tokenIn,
+                    intermediaryToken,
+                    amountInForMainSwap
+                );
 
                 // Second hop: intermediaryToken -> tokenOut
-                try
-                    this.executeSecondHopSwap(
-                        intermediaryToken,
-                        tokenOut,
-                        intermediaryAmount
-                    )
-                returns (uint256 result) {
-                    amountOut = result;
-                } catch Error(string memory reason) {
-                    revert(
-                        string(
-                            abi.encodePacked("Second hop swap failed: ", reason)
-                        )
-                    );
-                } catch {
-                    revert("Second hop swap failed with unknown error");
-                }
+                amountOut = swapThroughAlgebraPool(
+                    intermediaryToken,
+                    tokenOut,
+                    intermediaryAmount
+                );
 
                 emit SwapWithIntermediary(
                     tokenIn,
@@ -279,39 +314,6 @@ contract SwapAlgebra is ISwap {
         }
 
         return amountOut;
-    }
-
-    /**
-     * @dev Compatibility function for the ISwap interface (uses WZETA as intermediary by default)
-     */
-    function swap(
-        address tokenIn,
-        address tokenOut,
-        uint256 amountIn,
-        address gasZRC20,
-        uint256 gasFee
-    ) external returns (uint256 amountOut) {
-        // Use a default empty string for tokenName, which will rely on direct pools or default intermediary
-        string memory emptyString = "";
-        return swap(tokenIn, tokenOut, amountIn, gasZRC20, gasFee, emptyString);
-    }
-
-    uint160 internal constant MIN_SQRT_RATIO = 4295128739;
-    uint160 internal constant MAX_SQRT_RATIO =
-        1461446703485210103287273052203988822378723970342;
-
-    /// @notice Returns a valid `limitSqrtPrice` just beyond the current price
-    /// @param zeroForOne If true, token0 → token1; else token1 → token0
-    function getValidLimitSqrtPrice(
-        bool zeroForOne
-    ) internal pure returns (uint160) {
-        unchecked {
-            if (zeroForOne) {
-                return MIN_SQRT_RATIO + 1;
-            } else {
-                return MAX_SQRT_RATIO - 1;
-            }
-        }
     }
 
     /**
@@ -343,44 +345,10 @@ contract SwapAlgebra is ISwap {
         }
 
         // (uint160 currentPrice, , , , , , ) = IAlgebraPool(pool).globalState();
-        uint160 limitSqrtPrice = getValidLimitSqrtPrice(
-            zeroToOne
-        );
+        uint160 limitSqrtPrice = getValidLimitSqrtPrice(zeroToOne);
 
         // Perform the swap
         return executeAlgebraSwap(pool, amountIn, zeroToOne, limitSqrtPrice);
-    }
-
-    /**
-     * @dev Calculates the amount of input tokens needed to get the exact amount of gas tokens
-     * @param tokenIn The input token address
-     * @param gasZRC20 The gas token address
-     * @param gasFee The amount of gas tokens needed
-     * @return The amount of input tokens needed
-     */
-    function getAmountInForGasFee(
-        address tokenIn,
-        address gasZRC20,
-        uint256 gasFee
-    ) internal view returns (uint256) {
-        // Tokens in the path
-        address[] memory path;
-
-        // If the gas token is not WZETA, we need to route through WZETA
-        if (gasZRC20 != wzeta) {
-            path = new address[](3);
-            path[0] = tokenIn;
-            path[1] = wzeta;
-            path[2] = gasZRC20;
-        } else {
-            path = new address[](2);
-            path[0] = tokenIn;
-            path[1] = gasZRC20;
-        }
-
-        // Get the amount of input tokens needed to get the exact amount of gas tokens
-        uint256[] memory amounts = uniswapV2Router.getAmountsIn(gasFee, path);
-        return amounts[0];
     }
 
     /**
@@ -430,12 +398,11 @@ contract SwapAlgebra is ISwap {
      * @dev Callback for Algebra swap
      * @param amount0Delta The change in token0 balance
      * @param amount1Delta The change in token1 balance
-     * @param data Additional data passed by the pool
      */
     function algebraSwapCallback(
         int256 amount0Delta,
         int256 amount1Delta,
-        bytes calldata data
+        bytes calldata
     ) external {
         // Get the tokens from the caller pool
         address token0 = IAlgebraPool(msg.sender).token0();
@@ -452,19 +419,9 @@ contract SwapAlgebra is ISwap {
 
             if (balance < amount) {
                 revert("Insufficient token0 balance");
-                // revert(string(abi.encodePacked("Insufficient token0 balance: have ",
-                //     uint2str(balance), ", need ", uint2str(amount))));
             }
 
-            try IERC20(token0).transfer(msg.sender, amount) returns (
-                bool success
-            ) {
-                if (!success) {
-                    revert("Token0 transfer failed");
-                }
-            } catch {
-                revert("Error in token0 transfer");
-            }
+            IERC20(token0).safeTransfer(msg.sender, amount);
         }
 
         // If amount1Delta > 0, we need to transfer token1 to the pool
@@ -474,75 +431,9 @@ contract SwapAlgebra is ISwap {
 
             if (balance < amount) {
                 revert("Insufficient token1 balance");
-                // revert(string(abi.encodePacked("Insufficient token1 balance: have ",
-                //     uint2str(balance), ", need ", uint2str(amount))));
             }
 
-            try IERC20(token1).transfer(msg.sender, amount) returns (
-                bool success
-            ) {
-                if (!success) {
-                    revert("Token1 transfer failed");
-                }
-            } catch {
-                revert("Error in token1 transfer");
-            }
+            IERC20(token1).safeTransfer(msg.sender, amount);
         }
     }
-
-    /**
-     * @dev External function for executing direct swaps (to be used with try/catch)
-     */
-    function executeDirectSwap(
-        address tokenIn,
-        address tokenOut,
-        uint256 amountIn
-    ) external returns (uint256) {
-        return swapThroughAlgebraPool(tokenIn, tokenOut, amountIn);
-    }
-
-    /**
-     * @dev External function for executing the first hop of a swap (to be used with try/catch)
-     */
-    function executeFirstHopSwap(
-        address tokenIn,
-        address intermediaryToken,
-        uint256 amountIn
-    ) external returns (uint256) {
-        return swapThroughAlgebraPool(tokenIn, intermediaryToken, amountIn);
-    }
-
-    /**
-     * @dev External function for executing the second hop of a swap (to be used with try/catch)
-     */
-    function executeSecondHopSwap(
-        address intermediaryToken,
-        address tokenOut,
-        uint256 amountIn
-    ) external returns (uint256) {
-        return swapThroughAlgebraPool(intermediaryToken, tokenOut, amountIn);
-    }
-
-    // // Helper function to convert uint to string
-    // function uint2str(uint256 _i) internal pure returns (string memory) {
-    //     if (_i == 0) {
-    //         return "0";
-    //     }
-    //     uint256 j = _i;
-    //     uint256 len;
-    //     while (j != 0) {
-    //         len++;
-    //         j /= 10;
-    //     }
-    //     bytes memory bstr = new bytes(len);
-    //     uint256 k = len;
-    //     while (_i != 0) {
-    //         k = k-1;
-    //         uint8 temp = (48 + uint8(_i - _i / 10 * 10));
-    //         bytes1 b1 = bytes1(temp);
-    //         bstr[k] = b1;
-    //         _i /= 10;
-    //     }
-    //     return string(bstr);
-    // }
 }

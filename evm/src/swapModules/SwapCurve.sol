@@ -11,6 +11,7 @@ import "../interfaces/IUniswapV2Router02.sol";
 /**
  * @title SwapCurve
  * @dev Implements token swapping functionality for cross-chain routing using Curve StableSwap for main swaps
+ * @notice UNTESTED
  *
  * This contract handles the token swap process for the Router contract:
  * 1. Uses Curve pools for the main token swap (stable coins and other supported tokens)
