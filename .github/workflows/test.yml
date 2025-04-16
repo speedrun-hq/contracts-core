@@ -28,19 +28,16 @@ jobs:
           forge --version
 
       - name: Run Forge fmt
-        working-directory: evm
         run: |
           forge fmt --check
         id: fmt
 
       - name: Run Forge build
-        working-directory: evm
         run: |
           forge build --sizes
         id: build
 
       - name: Run Forge tests
-        working-directory: evm
         run: |
           forge test -vvv
         id: test 
