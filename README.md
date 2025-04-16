@@ -1,8 +1,6 @@
-# Speedrun Contracts
+# Speedrun EVM Contracts
 
-This repository holds all the smart contracts for the Speedrun protocol.
-
-Currently the repo only implements Solidity contracts but it will also source code for other smart contract languages like Solana in the future.
+This repository holds all the smart contracts for the Speedrun protocol deployed on EVM chains - including ZetaChain.
 
 ## Intent Contract Interface
 
