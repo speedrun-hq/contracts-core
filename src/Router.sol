@@ -54,6 +54,9 @@ contract Router is IRouter, Initializable, UUPSUpgradeable, AccessControlUpgrade
     // List of chain IDs for each token
     mapping(string => uint256[]) private _tokenChainIds;
 
+    // Per-chain gas limits for withdraw operations (optional, overrides global withdrawGasLimit)
+    mapping(uint256 => uint256) public chainWithdrawGasLimits;
+
     // Event emitted when an intent contract is set
     event IntentContractSet(uint256 indexed chainId, address indexed intentContract);
     // Event emitted when a new token is added
@@ -77,6 +80,12 @@ contract Router is IRouter, Initializable, UUPSUpgradeable, AccessControlUpgrade
     event GatewayUpdated(address indexed oldGateway, address indexed newGateway);
     // Event emitted when the swap module is updated
     event SwapModuleUpdated(address indexed oldSwapModule, address indexed newSwapModule);
+    // Event emitted when the global withdraw gas limit is updated
+    event WithdrawGasLimitUpdated(uint256 oldGasLimit, uint256 newGasLimit);
+    // Event emitted when a chain-specific withdraw gas limit is set
+    event ChainWithdrawGasLimitSet(uint256 indexed chainId, uint256 gasLimit);
+    // Event emitted when a chain-specific withdraw gas limit is removed
+    event ChainWithdrawGasLimitRemoved(uint256 indexed chainId);
 
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
@@ -221,8 +230,11 @@ contract Router is IRouter, Initializable, UUPSUpgradeable, AccessControlUpgrade
         (uint256 wantedAmount, uint256 wantedTip, uint256 wantedAmountWithTip) =
             _convertAmountsForDecimals(intentPayload.amount, amountWithTip, sourceDecimals, targetDecimals);
 
+        // Get the appropriate gas limit for the target chain
+        uint256 gasLimit = _getChainGasLimit(intentPayload.targetChain);
+
         // Get gas fee info from target ZRC20
-        (address gasZRC20, uint256 gasFee) = IZRC20(targetZRC20).withdrawGasFeeWithGasLimit(withdrawGasLimit);
+        (address gasZRC20, uint256 gasFee) = IZRC20(targetZRC20).withdrawGasFeeWithGasLimit(gasLimit);
 
         // Approve swap module to spend tokens
         IERC20(zrc20).approve(swapModule, amountWithTip);
@@ -273,7 +285,14 @@ contract Router is IRouter, Initializable, UUPSUpgradeable, AccessControlUpgrade
         } else {
             // Process settlement for connected chains
             _processChainsSettlementOnConnectedChain(
-                intentContract, targetZRC20, gasZRC20, amountWithTipOut, gasFee, settlementPayload, receiverAddress
+                intentContract,
+                targetZRC20,
+                gasZRC20,
+                amountWithTipOut,
+                gasFee,
+                settlementPayload,
+                receiverAddress,
+                gasLimit
             );
         }
 
@@ -314,6 +333,7 @@ contract Router is IRouter, Initializable, UUPSUpgradeable, AccessControlUpgrade
      * @param gasFee The gas fee to pay
      * @param settlementPayload The encoded settlement payload
      * @param receiverAddress The receiver address in case of revert
+     * @param gasLimit The gas limit to use for the transaction
      */
     function _processChainsSettlementOnConnectedChain(
         address intentContract,
@@ -322,11 +342,11 @@ contract Router is IRouter, Initializable, UUPSUpgradeable, AccessControlUpgrade
         uint256 amount,
         uint256 gasFee,
         bytes memory settlementPayload,
-        address receiverAddress
+        address receiverAddress,
+        uint256 gasLimit
     ) internal {
-        // Prepare call options
-        IGateway.CallOptions memory callOptions =
-            IGateway.CallOptions({gasLimit: withdrawGasLimit, isArbitraryCall: false});
+        // Prepare call options with provided gas limit
+        IGateway.CallOptions memory callOptions = IGateway.CallOptions({gasLimit: gasLimit, isArbitraryCall: false});
 
         // Prepare revert options
         IGateway.RevertOptions memory revertOptions = IGateway.RevertOptions({
@@ -556,6 +576,53 @@ contract Router is IRouter, Initializable, UUPSUpgradeable, AccessControlUpgrade
      */
     function setWithdrawGasLimit(uint256 newGasLimit) public onlyRole(DEFAULT_ADMIN_ROLE) {
         require(newGasLimit > 0, "Gas limit cannot be zero");
+        uint256 oldGasLimit = withdrawGasLimit;
         withdrawGasLimit = newGasLimit;
+        emit WithdrawGasLimitUpdated(oldGasLimit, newGasLimit);
+    }
+
+    /**
+     * @dev Sets a custom gas limit for a specific chain
+     * @param chainId The chain ID to set the gas limit for
+     * @param gasLimit The gas limit to set
+     */
+    function setChainWithdrawGasLimit(uint256 chainId, uint256 gasLimit) public onlyRole(DEFAULT_ADMIN_ROLE) {
+        require(gasLimit > 0, "Gas limit cannot be zero");
+        chainWithdrawGasLimits[chainId] = gasLimit;
+        emit ChainWithdrawGasLimitSet(chainId, gasLimit);
+    }
+
+    /**
+     * @dev Removes a custom gas limit for a specific chain
+     * @param chainId The chain ID to remove the gas limit for
+     */
+    function removeChainWithdrawGasLimit(uint256 chainId) public onlyRole(DEFAULT_ADMIN_ROLE) {
+        delete chainWithdrawGasLimits[chainId];
+        emit ChainWithdrawGasLimitRemoved(chainId);
+    }
+
+    /**
+     * @dev Gets the effective gas limit for a specific chain
+     * @param chainId The chain ID to get the gas limit for
+     * @return The gas limit to use for the specified chain
+     */
+    function getChainGasLimit(uint256 chainId) public view returns (uint256) {
+        return _getChainGasLimit(chainId);
+    }
+
+    /**
+     * @dev Internal function to get the appropriate gas limit for a specific chain
+     * @param chainId The chain ID to get the gas limit for
+     * @return The gas limit to use for the specified chain
+     */
+    function _getChainGasLimit(uint256 chainId) internal view returns (uint256) {
+        // If a chain-specific gas limit is set, use it
+        uint256 chainGasLimit = chainWithdrawGasLimits[chainId];
+        if (chainGasLimit > 0) {
+            return chainGasLimit;
+        }
+
+        // Otherwise use the global withdraw gas limit
+        return withdrawGasLimit;
     }
 }

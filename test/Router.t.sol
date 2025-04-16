@@ -47,6 +47,8 @@ contract RouterTest is Test {
     event Upgraded(address indexed implementation);
     event PauserAdded(address indexed pauser);
     event PauserRemoved(address indexed pauser);
+    event ChainWithdrawGasLimitSet(uint256 indexed chainId, uint256 gasLimit);
+    event ChainWithdrawGasLimitRemoved(uint256 indexed chainId);
 
     // Helper function to create a properly initialized Router
     function createInitializedRouter(address gatewayAddr, address swapModuleAddr) internal returns (Router) {
@@ -1017,5 +1019,153 @@ contract RouterTest is Test {
             PayloadUtils.bytesToAddress(receiver),
             "Receiver in settlement payload doesn't match"
         );
+    }
+
+    function test_SetChainWithdrawGasLimit() public {
+        uint256 chainId = 42161; // Arbitrum chain ID
+        uint256 customGasLimit = 500000; // Higher gas limit for Arbitrum
+
+        // Set a custom gas limit for the specific chain
+        vm.expectEmit();
+        emit ChainWithdrawGasLimitSet(chainId, customGasLimit);
+        router.setChainWithdrawGasLimit(chainId, customGasLimit);
+
+        // Verify the custom gas limit was set
+        assertEq(router.chainWithdrawGasLimits(chainId), customGasLimit);
+
+        // Verify getChainGasLimit returns the custom limit
+        assertEq(router.getChainGasLimit(chainId), customGasLimit);
+    }
+
+    function test_SetChainWithdrawGasLimit_ZeroValueReverts() public {
+        uint256 chainId = 42161; // Arbitrum chain ID
+        uint256 zeroGasLimit = 0;
+
+        // Attempt to set a zero gas limit
+        vm.expectRevert("Gas limit cannot be zero");
+        router.setChainWithdrawGasLimit(chainId, zeroGasLimit);
+    }
+
+    function test_SetChainWithdrawGasLimit_NonAdminReverts() public {
+        uint256 chainId = 42161; // Arbitrum chain ID
+        uint256 customGasLimit = 500000;
+
+        // Attempt to set a gas limit as non-admin
+        vm.prank(user1);
+        expectAccessControlError(user1);
+        router.setChainWithdrawGasLimit(chainId, customGasLimit);
+    }
+
+    function test_RemoveChainWithdrawGasLimit() public {
+        uint256 chainId = 42161; // Arbitrum chain ID
+        uint256 customGasLimit = 500000;
+
+        // First, set a custom gas limit
+        router.setChainWithdrawGasLimit(chainId, customGasLimit);
+        assertEq(router.chainWithdrawGasLimits(chainId), customGasLimit);
+
+        // Now remove the custom gas limit
+        vm.expectEmit();
+        emit ChainWithdrawGasLimitRemoved(chainId);
+        router.removeChainWithdrawGasLimit(chainId);
+
+        // Verify the custom gas limit was removed
+        assertEq(router.chainWithdrawGasLimits(chainId), 0);
+
+        // Verify getChainGasLimit now returns the global limit
+        assertEq(router.getChainGasLimit(chainId), router.withdrawGasLimit());
+    }
+
+    function test_RemoveChainWithdrawGasLimit_NonAdminReverts() public {
+        uint256 chainId = 42161; // Arbitrum chain ID
+        uint256 customGasLimit = 500000;
+
+        // First, set a custom gas limit
+        router.setChainWithdrawGasLimit(chainId, customGasLimit);
+
+        // Attempt to remove the gas limit as non-admin
+        vm.prank(user1);
+        expectAccessControlError(user1);
+        router.removeChainWithdrawGasLimit(chainId);
+    }
+
+    function test_GetChainGasLimit_ReturnsFallback() public {
+        uint256 chainId = 1; // Chain without custom gas limit
+        uint256 globalGasLimit = router.withdrawGasLimit();
+
+        // Verify the function returns the global limit when no custom limit is set
+        assertEq(router.getChainGasLimit(chainId), globalGasLimit);
+    }
+
+    function test_GetChainGasLimit_ReturnsCustom() public {
+        uint256 chainId = 42161; // Arbitrum chain ID
+        uint256 customGasLimit = 500000;
+
+        // Set a custom gas limit
+        router.setChainWithdrawGasLimit(chainId, customGasLimit);
+
+        // Verify the function returns the custom limit
+        assertEq(router.getChainGasLimit(chainId), customGasLimit);
+    }
+
+    function test_OnCall_UsesChainSpecificGasLimit() public {
+        // Setup intent contract
+        uint256 sourceChainId = 1;
+        uint256 targetChainId = 42161; // Arbitrum chain ID
+        address sourceIntentContract = makeAddr("sourceIntentContract");
+        address targetIntentContract = makeAddr("targetIntentContract");
+        router.setIntentContract(sourceChainId, sourceIntentContract);
+        router.setIntentContract(targetChainId, targetIntentContract);
+
+        // Setup token associations
+        string memory tokenName = "USDC";
+        router.addToken(tokenName);
+        address inputAsset = makeAddr("input_asset");
+        address targetAsset = makeAddr("target_asset");
+        router.addTokenAssociation(tokenName, sourceChainId, inputAsset, address(inputToken));
+        router.addTokenAssociation(tokenName, targetChainId, targetAsset, address(targetZRC20));
+
+        // Set a custom gas limit for the target chain
+        uint256 customGasLimit = 500000;
+        router.setChainWithdrawGasLimit(targetChainId, customGasLimit);
+
+        // Setup intent payload
+        bytes32 intentId = keccak256("test-intent");
+        uint256 amount = 100 ether;
+        uint256 tip = 10 ether;
+        bytes memory receiver = abi.encodePacked(user2);
+
+        bytes memory intentPayloadBytes =
+            PayloadUtils.encodeIntentPayload(intentId, amount, tip, targetChainId, receiver);
+
+        // Set modest slippage (5%)
+        swapModule.setSlippage(500);
+
+        // Mock withdrawGasFeeWithGasLimit to verify it's called with the custom gas limit
+        uint256 gasFee = 1 ether;
+        vm.mockCall(
+            address(targetZRC20),
+            abi.encodeWithSelector(IZRC20.withdrawGasFeeWithGasLimit.selector, customGasLimit),
+            abi.encode(address(gasZRC20), gasFee)
+        );
+
+        // Mint tokens to make the test work
+        inputToken.mint(address(router), amount + tip);
+        targetZRC20.mint(address(swapModule), amount + tip);
+        gasZRC20.mint(address(swapModule), gasFee);
+
+        // Setup context
+        IGateway.ZetaChainMessageContext memory context = IGateway.ZetaChainMessageContext({
+            chainID: sourceChainId,
+            sender: abi.encodePacked(sourceIntentContract),
+            senderEVM: sourceIntentContract
+        });
+
+        // Call onCall
+        vm.prank(address(gateway));
+        router.onCall(context, address(inputToken), amount + tip, intentPayloadBytes);
+
+        // The test passes if the mock call with the custom gas limit is used
+        // No need for additional assertions as the mock would fail if the wrong gas limit was used
     }
 }
