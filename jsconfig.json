@@ -1,0 +1,10 @@
+{
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@openzeppelin/contracts-upgradeable/*": ["lib/openzeppelin-contracts-upgradeable/contracts/*"],
+      "@openzeppelin/contracts/*": ["lib/openzeppelin-contracts/contracts/*"],
+      "forge-std/*": ["lib/forge-std/src/*"]
+    }
+  }
+} 

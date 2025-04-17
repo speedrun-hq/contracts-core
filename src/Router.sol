@@ -14,7 +14,6 @@ import "./interfaces/ISwap.sol";
 import "./interfaces/IRouter.sol";
 import "./interfaces/IIntent.sol";
 import "./utils/PayloadUtils.sol";
-// import "forge-std/console.sol";
 
 /**
  * @title Router
