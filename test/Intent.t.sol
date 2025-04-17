@@ -2,7 +2,8 @@
 pragma solidity 0.8.26;
 
 import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
-import {IERC20Errors} from "@openzeppelin/contracts/interfaces/draft-IERC6093.sol";import {Test, console2} from "forge-std/Test.sol";
+import {IERC20Errors} from "@openzeppelin/contracts/interfaces/draft-IERC6093.sol";
+import {Test, console2} from "forge-std/Test.sol";
 import {Intent} from "../src/Intent.sol";
 import {MockGateway} from "./mocks/MockGateway.sol";
 import {MockERC20} from "./mocks/MockERC20.sol";

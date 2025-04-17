@@ -2,7 +2,8 @@
 pragma solidity 0.8.26;
 
 import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
-import {UUPSUpgradeable} from "@openzeppelin/contracts/proxy/utils/UUPSUpgradeable.sol";import {Test, console2, Vm} from "forge-std/Test.sol";
+import {UUPSUpgradeable} from "@openzeppelin/contracts/proxy/utils/UUPSUpgradeable.sol";
+import {Test, console2, Vm} from "forge-std/Test.sol";
 import {Router} from "../src/Router.sol";
 import {MockGateway} from "./mocks/MockGateway.sol";
 import {MockToken} from "./mocks/MockToken.sol";
