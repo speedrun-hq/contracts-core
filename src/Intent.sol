@@ -192,7 +192,7 @@ contract Intent is IIntent, Initializable, UUPSUpgradeable, AccessControlUpgrade
         bytes32 intentId = computeIntentId(intentCounter, salt, block.chainid);
 
         // Increment counter
-        intentCounter++;
+        ++intentCounter;
 
         // Create payload for crosschain transaction
         bytes memory payload = PayloadUtils.encodeIntentPayload(intentId, amount, tip, targetChain, receiver);
@@ -375,9 +375,8 @@ contract Intent is IIntent, Initializable, UUPSUpgradeable, AccessControlUpgrade
      */
     function updateGateway(address _gateway) external onlyRole(DEFAULT_ADMIN_ROLE) {
         require(_gateway != address(0), "Gateway cannot be zero address");
-        address oldGateway = gateway;
+        emit GatewayUpdated(gateway, _gateway);
         gateway = _gateway;
-        emit GatewayUpdated(oldGateway, _gateway);
     }
 
     /**
@@ -386,8 +385,7 @@ contract Intent is IIntent, Initializable, UUPSUpgradeable, AccessControlUpgrade
      */
     function updateRouter(address _router) external onlyRole(DEFAULT_ADMIN_ROLE) {
         require(_router != address(0), "Router cannot be zero address");
-        address oldRouter = router;
+        emit RouterUpdated(router, _router);
         router = _router;
-        emit RouterUpdated(oldRouter, _router);
     }
 }

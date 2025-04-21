@@ -140,9 +140,8 @@ contract Router is IRouter, Initializable, UUPSUpgradeable, AccessControlUpgrade
      */
     function updateGateway(address _gateway) external onlyRole(DEFAULT_ADMIN_ROLE) {
         require(_gateway != address(0), "Gateway cannot be zero address");
-        address oldGateway = gateway;
+        emit GatewayUpdated(gateway, _gateway);
         gateway = _gateway;
-        emit GatewayUpdated(oldGateway, _gateway);
     }
 
     /**
@@ -151,9 +150,8 @@ contract Router is IRouter, Initializable, UUPSUpgradeable, AccessControlUpgrade
      */
     function updateSwapModule(address _swapModule) external onlyRole(DEFAULT_ADMIN_ROLE) {
         require(_swapModule != address(0), "Swap module cannot be zero address");
-        address oldSwapModule = swapModule;
+        emit SwapModuleUpdated(swapModule, _swapModule);
         swapModule = _swapModule;
-        emit SwapModuleUpdated(oldSwapModule, _swapModule);
     }
 
     /**
@@ -494,7 +492,7 @@ contract Router is IRouter, Initializable, UUPSUpgradeable, AccessControlUpgrade
 
         // Remove chainId from the array
         uint256[] storage chainIds = _tokenChainIds[name];
-        for (uint256 i = 0; i < chainIds.length; i++) {
+        for (uint256 i = 0; i < chainIds.length; ++i) {
             if (chainIds[i] == chainId) {
                 chainIds[i] = chainIds[chainIds.length - 1];
                 chainIds.pop();
@@ -545,7 +543,7 @@ contract Router is IRouter, Initializable, UUPSUpgradeable, AccessControlUpgrade
         assets = new address[](length);
         zrc20s = new address[](length);
 
-        for (uint256 i = 0; i < length; i++) {
+        for (uint256 i = 0; i < length; ++i) {
             uint256 chainId = chainIds[i];
             assets[i] = _tokenAssets[name][chainId];
             zrc20s[i] = _tokenZrc20s[name][chainId];
