@@ -7,6 +7,7 @@ import "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol"
 import "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "./interfaces/IGateway.sol";
 import "./interfaces/IRouter.sol";
 import "./interfaces/IIntent.sol";
@@ -24,6 +25,8 @@ contract Intent is
     PausableUpgradeable,
     ReentrancyGuardUpgradeable
 {
+    using SafeERC20 for IERC20;
+
     // Role definitions
     bytes32 public constant PAUSER_ROLE = keccak256("PAUSER_ROLE");
 
@@ -195,7 +198,7 @@ contract Intent is
         uint256 totalAmount = amount + tip;
 
         // Transfer ERC20 tokens from sender to this contract
-        IERC20(asset).transferFrom(msg.sender, address(this), totalAmount);
+        IERC20(asset).safeTransferFrom(msg.sender, address(this), totalAmount);
 
         // Generate intent ID using the computeIntentId function with current chain ID
         bytes32 intentId = computeIntentId(intentCounter, salt, block.chainid);
@@ -295,7 +298,7 @@ contract Intent is
         fulfillments[fulfillmentIndex] = msg.sender;
 
         // Transfer tokens from the sender to the receiver
-        IERC20(asset).transferFrom(msg.sender, receiver, amount);
+        IERC20(asset).safeTransferFrom(msg.sender, receiver, amount);
 
         // Emit event
         emit IntentFulfilled(intentId, asset, amount, receiver);
@@ -343,9 +346,9 @@ contract Intent is
         if (fulfilled) {
             settlement.paidTip = tip;
             paidTip = tip;
-            IERC20(asset).transfer(fulfiller, actualAmount + tip);
+            IERC20(asset).safeTransfer(fulfiller, actualAmount + tip);
         } else {
-            IERC20(asset).transfer(receiver, actualAmount + tip);
+            IERC20(asset).safeTransfer(receiver, actualAmount + tip);
         }
 
         // Emit the IntentSettled event
@@ -375,7 +378,7 @@ contract Intent is
 
         // Transfer tokens from gateway to this contract
         uint256 totalTransfer = payload.actualAmount + payload.tip;
-        IERC20(payload.asset).transferFrom(gateway, address(this), totalTransfer);
+        IERC20(payload.asset).safeTransferFrom(gateway, address(this), totalTransfer);
 
         // Settle the intent
         _settle(payload.intentId, payload.asset, payload.amount, payload.receiver, payload.tip, payload.actualAmount);
