@@ -190,7 +190,7 @@ contract Intent is
         bytes calldata receiver,
         uint256 tip,
         uint256 salt
-    ) external whenNotPaused nonReentrant returns (bytes32) {
+    ) external whenNotPaused returns (bytes32) {
         // Cannot initiate a transfer to the current chain
         require(targetChain != block.chainid, "Target chain cannot be the current chain");
 
@@ -283,7 +283,6 @@ contract Intent is
     function fulfill(bytes32 intentId, address asset, uint256 amount, address receiver)
         external
         whenNotPaused
-        nonReentrant
     {
         // Compute the fulfillment index
         bytes32 fulfillmentIndex = PayloadUtils.computeFulfillmentIndex(intentId, asset, amount, receiver);
