@@ -235,33 +235,42 @@ contract Router is IRouter, Initializable, UUPSUpgradeable, AccessControlUpgrade
         // Get gas fee info from target ZRC20
         (address gasZRC20, uint256 gasFee) = IZRC20(targetZRC20).withdrawGasFeeWithGasLimit(gasLimit);
 
-        // Approve swap module to spend tokens
-        IERC20(zrc20).approve(swapModule, amountWithTip);
-
-        // Perform swap through swap module
-        uint256 amountWithTipOut =
-            ISwap(swapModule).swap(zrc20, targetZRC20, amountWithTip, gasZRC20, gasFee, zrc20ToTokenName[zrc20]);
-
-        // Calculate slippage difference and adjust tip accordingly
-        uint256 slippageAndFeeCost = wantedAmountWithTip - amountWithTipOut;
-
-        // Initialize tip and actual amount
+        // Initialize variables
+        uint256 amountWithTipOut;
         uint256 tipAfterSwap;
         uint256 actualAmount = wantedAmount;
-
-        // Check if tip covers the slippage and fee costs
-        if (wantedTip > slippageAndFeeCost) {
-            // Tip covers all costs, subtract from tip only
-            tipAfterSwap = wantedTip - slippageAndFeeCost;
+        
+        // Check if source and target ZRC20 are the same
+        if (zrc20 == targetZRC20) {
+            // No swap needed, use original amounts
+            amountWithTipOut = amountWithTip;
+            tipAfterSwap = wantedTip;
+            // Actual amount is exactly the wanted amount
+            actualAmount = wantedAmount;
         } else {
-            // Tip doesn't cover costs, use it all and reduce the amount
-            tipAfterSwap = 0;
-            // Calculate how much remaining slippage to cover from the amount
-            uint256 remainingCost = slippageAndFeeCost - wantedTip;
-            // Ensure the amount is greater than the remaining cost, otherwise fail
-            require(wantedAmount > remainingCost, "Amount insufficient to cover costs after tip");
-            // Reduce the actual amount by the remaining cost
-            actualAmount = wantedAmount - remainingCost;
+            // Approve swap module to spend tokens
+            IERC20(zrc20).approve(swapModule, amountWithTip);
+
+            // Perform swap through swap module
+            amountWithTipOut = ISwap(swapModule).swap(zrc20, targetZRC20, amountWithTip, gasZRC20, gasFee, zrc20ToTokenName[zrc20]);
+
+            // Calculate slippage difference and adjust tip accordingly
+            uint256 slippageAndFeeCost = wantedAmountWithTip - amountWithTipOut;
+
+            // Check if tip covers the slippage and fee costs
+            if (wantedTip > slippageAndFeeCost) {
+                // Tip covers all costs, subtract from tip only
+                tipAfterSwap = wantedTip - slippageAndFeeCost;
+            } else {
+                // Tip doesn't cover costs, use it all and reduce the amount
+                tipAfterSwap = 0;
+                // Calculate how much remaining slippage to cover from the amount
+                uint256 remainingCost = slippageAndFeeCost - wantedTip;
+                // Ensure the amount is greater than the remaining cost, otherwise fail
+                require(wantedAmount > remainingCost, "Amount insufficient to cover costs after tip");
+                // Reduce the actual amount by the remaining cost
+                actualAmount = wantedAmount - remainingCost;
+            }
         }
 
         // Convert receiver from bytes to address
