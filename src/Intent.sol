@@ -278,11 +278,11 @@ contract Intent is IIntent, Initializable, UUPSUpgradeable, AccessControlUpgrade
         // Check if intent has already been settled
         require(!settlements[fulfillmentIndex].settled, "Intent already settled");
 
-        // Transfer tokens from the sender to the receiver
-        IERC20(asset).transferFrom(msg.sender, receiver, amount);
-
         // Register the fulfillment
         fulfillments[fulfillmentIndex] = msg.sender;
+
+        // Transfer tokens from the sender to the receiver
+        IERC20(asset).transferFrom(msg.sender, receiver, amount);
 
         // Emit event
         emit IntentFulfilled(intentId, asset, amount, receiver);
@@ -328,9 +328,9 @@ contract Intent is IIntent, Initializable, UUPSUpgradeable, AccessControlUpgrade
         // If there's a fulfiller, transfer the actual amount + tip to them
         // Otherwise, transfer actual amount + tip to the receiver
         if (fulfilled) {
-            IERC20(asset).transfer(fulfiller, actualAmount + tip);
             settlement.paidTip = tip;
             paidTip = tip;
+            IERC20(asset).transfer(fulfiller, actualAmount + tip);
         } else {
             IERC20(asset).transfer(receiver, actualAmount + tip);
         }
