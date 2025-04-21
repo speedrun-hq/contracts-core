@@ -280,10 +280,7 @@ contract Intent is
      * @param amount Amount to transfer
      * @param receiver Receiver address
      */
-    function fulfill(bytes32 intentId, address asset, uint256 amount, address receiver)
-        external
-        whenNotPaused
-    {
+    function fulfill(bytes32 intentId, address asset, uint256 amount, address receiver) external whenNotPaused {
         // Compute the fulfillment index
         bytes32 fulfillmentIndex = PayloadUtils.computeFulfillmentIndex(intentId, asset, amount, receiver);
 
