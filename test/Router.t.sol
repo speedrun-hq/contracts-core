@@ -1183,7 +1183,7 @@ contract RouterTest is Test {
         router.addToken(tokenName);
         address inputAsset = makeAddr("input_asset");
         address targetAsset = makeAddr("target_asset");
-        
+
         // The key difference: using the same ZRC20 token for both source and target
         router.addTokenAssociation(tokenName, sourceChainId, inputAsset, address(inputToken));
         router.addTokenAssociation(tokenName, targetChainId, targetAsset, address(inputToken));
@@ -1238,31 +1238,29 @@ contract RouterTest is Test {
 
         // Verify the swap function was not called
         (bytes32[] memory reads, bytes32[] memory writes) = vm.accesses(address(swapModule));
-        
+
         // Verify no swap was performed - the swap function should not be called
         bool swapCalled = false;
         bytes4 swapSelector = bytes4(keccak256("swap(address,address,uint256,address,uint256,string)"));
-        
-        for (uint i = 0; i < reads.length; i++) {
+
+        for (uint256 i = 0; i < reads.length; i++) {
             // Check if any read access matches the swap selector storage slot
             if (uint256(reads[i]) < 4 && bytes4(uint32(uint256(reads[i]))) == swapSelector) {
                 swapCalled = true;
                 break;
             }
         }
-        
+
         assertFalse(swapCalled, "Swap function should not be called when source and target ZRC20s are the same");
 
         // Verify approvals were made to the gateway
         assertTrue(
-            inputToken.allowance(address(router), address(gateway)) > 0,
-            "Router should approve input token to gateway"
+            inputToken.allowance(address(router), address(gateway)) > 0, "Router should approve input token to gateway"
         );
         assertTrue(
-            gasZRC20.allowance(address(router), address(gateway)) > 0, 
-            "Router should approve gas ZRC20 to gateway"
+            gasZRC20.allowance(address(router), address(gateway)) > 0, "Router should approve gas ZRC20 to gateway"
         );
-        
+
         // Verify actual amount equals wanted amount (no reduction)
         // This is implicit in the event emission check above but would be
         // even better with an explicit check of the settlement payload

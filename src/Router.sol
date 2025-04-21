@@ -239,7 +239,7 @@ contract Router is IRouter, Initializable, UUPSUpgradeable, AccessControlUpgrade
         uint256 amountWithTipOut;
         uint256 tipAfterSwap;
         uint256 actualAmount = wantedAmount;
-        
+
         // Check if source and target ZRC20 are the same
         if (zrc20 == targetZRC20) {
             // No swap needed, use original amounts
@@ -252,7 +252,8 @@ contract Router is IRouter, Initializable, UUPSUpgradeable, AccessControlUpgrade
             IERC20(zrc20).approve(swapModule, amountWithTip);
 
             // Perform swap through swap module
-            amountWithTipOut = ISwap(swapModule).swap(zrc20, targetZRC20, amountWithTip, gasZRC20, gasFee, zrc20ToTokenName[zrc20]);
+            amountWithTipOut =
+                ISwap(swapModule).swap(zrc20, targetZRC20, amountWithTip, gasZRC20, gasFee, zrc20ToTokenName[zrc20]);
 
             // Calculate slippage difference and adjust tip accordingly
             uint256 slippageAndFeeCost = wantedAmountWithTip - amountWithTipOut;
