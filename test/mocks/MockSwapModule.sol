@@ -25,13 +25,23 @@ contract MockSwapModule is ISwap {
         // Calculate amount out based on slippage settings
         uint256 slippageCost = (amountIn * slippage) / 10000; // slippage in basis points (e.g., 100 = 1%)
 
-        require(amountIn > slippageCost + gasFee, "Amount insufficient to cover costs after tip");
+        // Only account for gas fee if gasZRC20 is provided
+        uint256 totalCost = slippageCost;
+        if (gasZRC20 != address(0)) {
+            totalCost += gasFee;
+        }
 
-        amountOut = amountIn - slippageCost - gasFee;
+        require(amountIn > totalCost, "Amount insufficient to cover costs after tip");
+
+        amountOut = amountIn - totalCost;
 
         // Transfer tokens back to the sender
         IERC20(tokenOut).transfer(msg.sender, amountOut);
-        IERC20(gasZRC20).transfer(msg.sender, gasFee);
+        
+        // Only transfer gas fee if gasZRC20 is not zero address
+        if (gasZRC20 != address(0) && gasFee > 0) {
+            IERC20(gasZRC20).transfer(msg.sender, gasFee);
+        }
 
         return amountOut;
     }
@@ -49,13 +59,23 @@ contract MockSwapModule is ISwap {
         // Calculate amount out based on slippage settings
         uint256 slippageCost = (amountIn * slippage) / 10000; // slippage in basis points (e.g., 100 = 1%)
 
-        require(amountIn > slippageCost + gasFee, "Amount insufficient to cover costs after tip");
+        // Only account for gas fee if gasZRC20 is provided
+        uint256 totalCost = slippageCost;
+        if (gasZRC20 != address(0)) {
+            totalCost += gasFee;
+        }
 
-        amountOut = amountIn - slippageCost - gasFee;
+        require(amountIn > totalCost, "Amount insufficient to cover costs after tip");
+
+        amountOut = amountIn - totalCost;
 
         // Transfer tokens back to the sender
         IERC20(tokenOut).transfer(msg.sender, amountOut);
-        IERC20(gasZRC20).transfer(msg.sender, gasFee);
+        
+        // Only transfer gas fee if gasZRC20 is not zero address
+        if (gasZRC20 != address(0) && gasFee > 0) {
+            IERC20(gasZRC20).transfer(msg.sender, gasFee);
+        }
 
         return amountOut;
     }

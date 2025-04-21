@@ -229,11 +229,21 @@ contract Router is IRouter, Initializable, UUPSUpgradeable, AccessControlUpgrade
         (uint256 wantedAmount, uint256 wantedTip, uint256 wantedAmountWithTip) =
             _convertAmountsForDecimals(intentPayload.amount, amountWithTip, sourceDecimals, targetDecimals);
 
+        // Check if target chain is ZetaChain
+        bool isZetaChainDestination = intentPayload.targetChain == block.chainid;
+
         // Get the appropriate gas limit for the target chain
         uint256 gasLimit = _getChainGasLimit(intentPayload.targetChain);
 
-        // Get gas fee info from target ZRC20
-        (address gasZRC20, uint256 gasFee) = IZRC20(targetZRC20).withdrawGasFeeWithGasLimit(gasLimit);
+        // Initialize gas fee variables
+        address gasZRC20 = address(0);
+        uint256 gasFee = 0;
+
+        // Only get gas fee if the destination is not ZetaChain
+        if (!isZetaChainDestination) {
+            // Get gas fee info from target ZRC20
+            (gasZRC20, gasFee) = IZRC20(targetZRC20).withdrawGasFeeWithGasLimit(gasLimit);
+        }
 
         // Initialize variables
         uint256 amountWithTipOut;
@@ -288,7 +298,7 @@ contract Router is IRouter, Initializable, UUPSUpgradeable, AccessControlUpgrade
         );
 
         // Check if target chain is the current chain (ZetaChain)
-        if (intentPayload.targetChain == block.chainid) {
+        if (isZetaChainDestination) {
             // Process settlement directly on ZetaChain
             _processChainsSettlementOnZetaChain(intentContract, targetZRC20, amountWithTipOut, settlementPayload);
         } else {

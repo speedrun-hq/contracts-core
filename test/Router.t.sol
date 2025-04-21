@@ -951,6 +951,7 @@ contract RouterTest is Test {
         swapModule.setSlippage(500);
 
         // Mock setup for IZRC20 withdrawGasFeeWithGasLimit
+        // The result will be used in Router but eventually ignored for ZetaChain destinations
         uint256 gasFee = 1 ether;
         vm.mockCall(
             address(targetZRC20),
@@ -998,7 +999,9 @@ contract RouterTest is Test {
                 // Verify event parameters
                 assertEq(zrc20, address(inputToken), "ZRC20 address in event doesn't match");
                 assertEq(eventAmount, amount + tip, "Amount in event doesn't match");
-                assertEq(eventTip, 3.5 ether, "Tip in event doesn't match"); // 3.5 ether after slippage and gas fee
+                // For ZetaChain destinations, only slippage is deducted from the tip (5% of 110 ether = 5.5 ether)
+                // So the remaining tip should be 10 - 5.5 = 4.5 ether
+                assertEq(eventTip, 4.5 ether, "Tip in event doesn't match");
             }
         }
 
