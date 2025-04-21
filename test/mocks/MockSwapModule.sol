@@ -37,7 +37,7 @@ contract MockSwapModule is ISwap {
 
         // Transfer tokens back to the sender
         IERC20(tokenOut).transfer(msg.sender, amountOut);
-        
+
         // Only transfer gas fee if gasZRC20 is not zero address
         if (gasZRC20 != address(0) && gasFee > 0) {
             IERC20(gasZRC20).transfer(msg.sender, gasFee);
@@ -71,7 +71,7 @@ contract MockSwapModule is ISwap {
 
         // Transfer tokens back to the sender
         IERC20(tokenOut).transfer(msg.sender, amountOut);
-        
+
         // Only transfer gas fee if gasZRC20 is not zero address
         if (gasZRC20 != address(0) && gasFee > 0) {
             IERC20(gasZRC20).transfer(msg.sender, gasFee);
