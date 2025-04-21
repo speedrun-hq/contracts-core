@@ -5,7 +5,9 @@ import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "./interfaces/IGateway.sol";
 import "./interfaces/IRouter.sol";
 import "./interfaces/IIntent.sol";
@@ -15,7 +17,16 @@ import "./utils/PayloadUtils.sol";
  * @title Intent
  * @dev Handles intent-based transfers across chains
  */
-contract Intent is IIntent, Initializable, UUPSUpgradeable, AccessControlUpgradeable, PausableUpgradeable {
+contract Intent is
+    IIntent,
+    Initializable,
+    UUPSUpgradeable,
+    AccessControlUpgradeable,
+    PausableUpgradeable,
+    ReentrancyGuardUpgradeable
+{
+    using SafeERC20 for IERC20;
+
     // Role definitions
     bytes32 public constant PAUSER_ROLE = keccak256("PAUSER_ROLE");
 
@@ -112,8 +123,9 @@ contract Intent is IIntent, Initializable, UUPSUpgradeable, AccessControlUpgrade
 
     function initialize(address _gateway, address _router) public initializer {
         __AccessControl_init();
-        __UUPSUpgradeable_init();
-        __Pausable_init();
+        __UUPSUpgradeable_init_unchained();
+        __Pausable_init_unchained();
+        __ReentrancyGuard_init_unchained();
 
         // Set up admin role
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
@@ -186,13 +198,13 @@ contract Intent is IIntent, Initializable, UUPSUpgradeable, AccessControlUpgrade
         uint256 totalAmount = amount + tip;
 
         // Transfer ERC20 tokens from sender to this contract
-        IERC20(asset).transferFrom(msg.sender, address(this), totalAmount);
+        IERC20(asset).safeTransferFrom(msg.sender, address(this), totalAmount);
 
         // Generate intent ID using the computeIntentId function with current chain ID
         bytes32 intentId = computeIntentId(intentCounter, salt, block.chainid);
 
         // Increment counter
-        intentCounter++;
+        ++intentCounter;
 
         // Create payload for crosschain transaction
         bytes memory payload = PayloadUtils.encodeIntentPayload(intentId, amount, tip, targetChain, receiver);
@@ -268,7 +280,11 @@ contract Intent is IIntent, Initializable, UUPSUpgradeable, AccessControlUpgrade
      * @param amount Amount to transfer
      * @param receiver Receiver address
      */
-    function fulfill(bytes32 intentId, address asset, uint256 amount, address receiver) external whenNotPaused {
+    function fulfill(bytes32 intentId, address asset, uint256 amount, address receiver)
+        external
+        whenNotPaused
+        nonReentrant
+    {
         // Compute the fulfillment index
         bytes32 fulfillmentIndex = PayloadUtils.computeFulfillmentIndex(intentId, asset, amount, receiver);
 
@@ -278,11 +294,11 @@ contract Intent is IIntent, Initializable, UUPSUpgradeable, AccessControlUpgrade
         // Check if intent has already been settled
         require(!settlements[fulfillmentIndex].settled, "Intent already settled");
 
-        // Transfer tokens from the sender to the receiver
-        IERC20(asset).transferFrom(msg.sender, receiver, amount);
-
         // Register the fulfillment
         fulfillments[fulfillmentIndex] = msg.sender;
+
+        // Transfer tokens from the sender to the receiver
+        IERC20(asset).safeTransferFrom(msg.sender, receiver, amount);
 
         // Emit event
         emit IntentFulfilled(intentId, asset, amount, receiver);
@@ -328,11 +344,11 @@ contract Intent is IIntent, Initializable, UUPSUpgradeable, AccessControlUpgrade
         // If there's a fulfiller, transfer the actual amount + tip to them
         // Otherwise, transfer actual amount + tip to the receiver
         if (fulfilled) {
-            IERC20(asset).transfer(fulfiller, actualAmount + tip);
             settlement.paidTip = tip;
             paidTip = tip;
+            IERC20(asset).safeTransfer(fulfiller, actualAmount + tip);
         } else {
-            IERC20(asset).transfer(receiver, actualAmount + tip);
+            IERC20(asset).safeTransfer(receiver, actualAmount + tip);
         }
 
         // Emit the IntentSettled event
@@ -351,6 +367,7 @@ contract Intent is IIntent, Initializable, UUPSUpgradeable, AccessControlUpgrade
         external
         payable
         onlyGatewayOrRouter
+        nonReentrant
         returns (bytes memory)
     {
         // Verify sender is the router
@@ -361,7 +378,7 @@ contract Intent is IIntent, Initializable, UUPSUpgradeable, AccessControlUpgrade
 
         // Transfer tokens from gateway to this contract
         uint256 totalTransfer = payload.actualAmount + payload.tip;
-        IERC20(payload.asset).transferFrom(gateway, address(this), totalTransfer);
+        IERC20(payload.asset).safeTransferFrom(gateway, address(this), totalTransfer);
 
         // Settle the intent
         _settle(payload.intentId, payload.asset, payload.amount, payload.receiver, payload.tip, payload.actualAmount);
@@ -375,9 +392,8 @@ contract Intent is IIntent, Initializable, UUPSUpgradeable, AccessControlUpgrade
      */
     function updateGateway(address _gateway) external onlyRole(DEFAULT_ADMIN_ROLE) {
         require(_gateway != address(0), "Gateway cannot be zero address");
-        address oldGateway = gateway;
+        emit GatewayUpdated(gateway, _gateway);
         gateway = _gateway;
-        emit GatewayUpdated(oldGateway, _gateway);
     }
 
     /**
@@ -386,8 +402,7 @@ contract Intent is IIntent, Initializable, UUPSUpgradeable, AccessControlUpgrade
      */
     function updateRouter(address _router) external onlyRole(DEFAULT_ADMIN_ROLE) {
         require(_router != address(0), "Router cannot be zero address");
-        address oldRouter = router;
+        emit RouterUpdated(router, _router);
         router = _router;
-        emit RouterUpdated(oldRouter, _router);
     }
 }
