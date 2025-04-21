@@ -5,6 +5,7 @@ import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "./interfaces/IGateway.sol";
 import "./interfaces/IRouter.sol";
@@ -15,7 +16,14 @@ import "./utils/PayloadUtils.sol";
  * @title Intent
  * @dev Handles intent-based transfers across chains
  */
-contract Intent is IIntent, Initializable, UUPSUpgradeable, AccessControlUpgradeable, PausableUpgradeable {
+contract Intent is
+    IIntent,
+    Initializable,
+    UUPSUpgradeable,
+    AccessControlUpgradeable,
+    PausableUpgradeable,
+    ReentrancyGuardUpgradeable
+{
     // Role definitions
     bytes32 public constant PAUSER_ROLE = keccak256("PAUSER_ROLE");
 
@@ -112,8 +120,9 @@ contract Intent is IIntent, Initializable, UUPSUpgradeable, AccessControlUpgrade
 
     function initialize(address _gateway, address _router) public initializer {
         __AccessControl_init();
-        __UUPSUpgradeable_init();
-        __Pausable_init();
+        __UUPSUpgradeable_init_unchained();
+        __Pausable_init_unchained();
+        __ReentrancyGuard_init_unchained();
 
         // Set up admin role
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
@@ -178,7 +187,7 @@ contract Intent is IIntent, Initializable, UUPSUpgradeable, AccessControlUpgrade
         bytes calldata receiver,
         uint256 tip,
         uint256 salt
-    ) external whenNotPaused returns (bytes32) {
+    ) external whenNotPaused nonReentrant returns (bytes32) {
         // Cannot initiate a transfer to the current chain
         require(targetChain != block.chainid, "Target chain cannot be the current chain");
 
@@ -268,7 +277,11 @@ contract Intent is IIntent, Initializable, UUPSUpgradeable, AccessControlUpgrade
      * @param amount Amount to transfer
      * @param receiver Receiver address
      */
-    function fulfill(bytes32 intentId, address asset, uint256 amount, address receiver) external whenNotPaused {
+    function fulfill(bytes32 intentId, address asset, uint256 amount, address receiver)
+        external
+        whenNotPaused
+        nonReentrant
+    {
         // Compute the fulfillment index
         bytes32 fulfillmentIndex = PayloadUtils.computeFulfillmentIndex(intentId, asset, amount, receiver);
 
@@ -351,6 +364,7 @@ contract Intent is IIntent, Initializable, UUPSUpgradeable, AccessControlUpgrade
         external
         payable
         onlyGatewayOrRouter
+        nonReentrant
         returns (bytes memory)
     {
         // Verify sender is the router

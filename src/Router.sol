@@ -5,6 +5,7 @@ import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "./interfaces/IUniswapV3Router.sol";
@@ -19,7 +20,14 @@ import "./utils/PayloadUtils.sol";
  * @title Router
  * @dev Routes CCTX and handles ZRC20 swaps on ZetaChain
  */
-contract Router is IRouter, Initializable, UUPSUpgradeable, AccessControlUpgradeable, PausableUpgradeable {
+contract Router is
+    IRouter,
+    Initializable,
+    UUPSUpgradeable,
+    AccessControlUpgradeable,
+    PausableUpgradeable,
+    ReentrancyGuardUpgradeable
+{
     using SafeERC20 for IERC20;
 
     // Role definitions
@@ -98,8 +106,9 @@ contract Router is IRouter, Initializable, UUPSUpgradeable, AccessControlUpgrade
      */
     function initialize(address _gateway, address _swapModule) public initializer {
         __AccessControl_init();
-        __UUPSUpgradeable_init();
-        __Pausable_init();
+        __UUPSUpgradeable_init_unchained();
+        __Pausable_init_unchained();
+        __ReentrancyGuard_init_unchained();
 
         require(_gateway != address(0), "Invalid gateway address");
         require(_swapModule != address(0), "Invalid swap module address");
@@ -205,7 +214,7 @@ contract Router is IRouter, Initializable, UUPSUpgradeable, AccessControlUpgrade
         address zrc20,
         uint256 amountWithTip,
         bytes calldata payload
-    ) external override onlyGatewayOrIntent whenNotPaused {
+    ) external override onlyGatewayOrIntent whenNotPaused nonReentrant {
         // Verify the call is coming from a registered intent contract
         require(intentContracts[context.chainID] == context.senderEVM, "Call must be from intent contract");
 
@@ -573,9 +582,8 @@ contract Router is IRouter, Initializable, UUPSUpgradeable, AccessControlUpgrade
      */
     function setWithdrawGasLimit(uint256 newGasLimit) public onlyRole(DEFAULT_ADMIN_ROLE) {
         require(newGasLimit > 0, "Gas limit cannot be zero");
-        uint256 oldGasLimit = withdrawGasLimit;
+        emit WithdrawGasLimitUpdated(withdrawGasLimit, newGasLimit);
         withdrawGasLimit = newGasLimit;
-        emit WithdrawGasLimitUpdated(oldGasLimit, newGasLimit);
     }
 
     /**
