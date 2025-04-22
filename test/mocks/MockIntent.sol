@@ -13,6 +13,10 @@ contract MockIntent is IIntent {
     address private _lastCaller;
     bytes private _lastMessage;
 
+    function initiate(address, uint256, uint256, bytes calldata, uint256, uint256) external returns (bytes32) {
+        return bytes32(0);
+    }
+
     /**
      * @dev Mock implementation of onCall function to record the parameters
      * @param context The message context containing sender information
