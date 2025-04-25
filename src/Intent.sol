@@ -74,11 +74,7 @@ contract Intent is IIntent, Initializable, UUPSUpgradeable, AccessControlUpgrade
 
     // Event emitted when an intent with call is fulfilled
     event IntentFulfilledWithCall(
-        bytes32 indexed intentId,
-        address indexed asset,
-        uint256 amount,
-        address indexed receiver,
-        bytes data
+        bytes32 indexed intentId, address indexed asset, uint256 amount, address indexed receiver, bytes data
     );
 
     // Event emitted when an intent is settled
@@ -191,9 +187,9 @@ contract Intent is IIntent, Initializable, UUPSUpgradeable, AccessControlUpgrade
      * @return The computed fulfillment index
      */
     function getFulfillmentIndex(
-        bytes32 intentId, 
-        address asset, 
-        uint256 amount, 
+        bytes32 intentId,
+        address asset,
+        uint256 amount,
         address receiver,
         bool isCall,
         bytes calldata data
@@ -290,7 +286,8 @@ contract Intent is IIntent, Initializable, UUPSUpgradeable, AccessControlUpgrade
         intentCounter++;
 
         // Create payload for crosschain transaction
-        bytes memory payload = PayloadUtils.encodeIntentPayload(intentId, amount, tip, targetChain, receiver, isCall, data);
+        bytes memory payload =
+            PayloadUtils.encodeIntentPayload(intentId, amount, tip, targetChain, receiver, isCall, data);
 
         if (isZetaChain) {
             // ZetaChain as source - direct call to router without going through gateway
@@ -379,27 +376,19 @@ contract Intent is IIntent, Initializable, UUPSUpgradeable, AccessControlUpgrade
      * @param receiver Receiver address that implements IntentTarget
      * @param data Custom data to be passed to the receiver contract
      */
-    function fulfillCall(
-        bytes32 intentId,
-        address asset,
-        uint256 amount,
-        address receiver,
-        bytes calldata data
-    ) external whenNotPaused {
+    function fulfillCall(bytes32 intentId, address asset, uint256 amount, address receiver, bytes calldata data)
+        external
+        whenNotPaused
+    {
         _fulfill(intentId, asset, amount, receiver, true, data);
     }
 
     /**
      * @dev Internal function for intent fulfillment
      */
-    function _fulfill(
-        bytes32 intentId,
-        address asset,
-        uint256 amount,
-        address receiver,
-        bool isCall,
-        bytes memory data
-    ) internal {
+    function _fulfill(bytes32 intentId, address asset, uint256 amount, address receiver, bool isCall, bytes memory data)
+        internal
+    {
         // Compute the fulfillment index
         bytes32 fulfillmentIndex = PayloadUtils.computeFulfillmentIndex(intentId, asset, amount, receiver, isCall, data);
 
@@ -507,7 +496,9 @@ contract Intent is IIntent, Initializable, UUPSUpgradeable, AccessControlUpgrade
 
         // Emit the appropriate event
         if (isCall) {
-            emit IntentSettledWithCall(intentId, asset, amount, receiver, fulfilled, fulfiller, actualAmount, paidTip, data);
+            emit IntentSettledWithCall(
+                intentId, asset, amount, receiver, fulfilled, fulfiller, actualAmount, paidTip, data
+            );
         } else {
             emit IntentSettled(intentId, asset, amount, receiver, fulfilled, fulfiller, actualAmount, paidTip);
         }

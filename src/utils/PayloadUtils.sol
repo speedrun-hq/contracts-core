@@ -48,8 +48,15 @@ library PayloadUtils {
      * @dev Decodes payload back into intent data
      */
     function decodeIntentPayload(bytes memory payload) internal pure returns (IntentPayload memory) {
-        (bytes32 intentId, uint256 amount, uint256 tip, uint256 targetChain, bytes memory receiver, bool isCall, bytes memory data) =
-            abi.decode(payload, (bytes32, uint256, uint256, uint256, bytes, bool, bytes));
+        (
+            bytes32 intentId,
+            uint256 amount,
+            uint256 tip,
+            uint256 targetChain,
+            bytes memory receiver,
+            bool isCall,
+            bytes memory data
+        ) = abi.decode(payload, (bytes32, uint256, uint256, uint256, bytes, bool, bytes));
 
         return IntentPayload({
             intentId: intentId,
@@ -121,8 +128,16 @@ library PayloadUtils {
      * @dev Decodes settlement payload back into data
      */
     function decodeSettlementPayload(bytes memory payload) internal pure returns (SettlementPayload memory) {
-        (bytes32 intentId, uint256 amount, address asset, address receiver, uint256 tip, uint256 actualAmount, bool isCall, bytes memory data) =
-            abi.decode(payload, (bytes32, uint256, address, address, uint256, uint256, bool, bytes));
+        (
+            bytes32 intentId,
+            uint256 amount,
+            address asset,
+            address receiver,
+            uint256 tip,
+            uint256 actualAmount,
+            bool isCall,
+            bytes memory data
+        ) = abi.decode(payload, (bytes32, uint256, address, address, uint256, uint256, bool, bytes));
 
         return SettlementPayload({
             intentId: intentId,
@@ -165,12 +180,11 @@ library PayloadUtils {
      * @param receiver Receiver address
      * @return The computed fulfillment index
      */
-    function computeFulfillmentIndex(
-        bytes32 intentId,
-        address asset,
-        uint256 amount,
-        address receiver
-    ) internal pure returns (bytes32) {
+    function computeFulfillmentIndex(bytes32 intentId, address asset, uint256 amount, address receiver)
+        internal
+        pure
+        returns (bytes32)
+    {
         return computeFulfillmentIndex(intentId, asset, amount, receiver, false, "");
     }
 

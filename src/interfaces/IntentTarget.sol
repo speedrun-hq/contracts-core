@@ -13,12 +13,7 @@ interface IntentTarget {
      * @param amount Amount transferred
      * @param data Custom data for execution
      */
-    function onFulfill(
-        bytes32 intentId,
-        address asset,
-        uint256 amount,
-        bytes calldata data
-    ) external;
+    function onFulfill(bytes32 intentId, address asset, uint256 amount, bytes calldata data) external;
 
     /**
      * @dev Called during intent settlement to execute custom logic
@@ -28,11 +23,6 @@ interface IntentTarget {
      * @param data Custom data for execution
      * @param fulfillmentIndex The fulfillment index for this intent
      */
-    function onSettle(
-        bytes32 intentId,
-        address asset,
-        uint256 amount,
-        bytes calldata data,
-        bytes32 fulfillmentIndex
-    ) external;
-} 
+    function onSettle(bytes32 intentId, address asset, uint256 amount, bytes calldata data, bytes32 fulfillmentIndex)
+        external;
+}

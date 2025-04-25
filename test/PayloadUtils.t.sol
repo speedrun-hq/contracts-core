@@ -225,7 +225,8 @@ contract PayloadUtilsTest is Test {
 
         assertFalse(index1 == index2, "Indices should be different for different intent IDs");
 
-        bytes32 index3 = PayloadUtils.computeFulfillmentIndex(intentId1, makeAddr("different-asset"), amount, receiver, isCall, data);
+        bytes32 index3 =
+            PayloadUtils.computeFulfillmentIndex(intentId1, makeAddr("different-asset"), amount, receiver, isCall, data);
 
         assertFalse(index1 == index3, "Indices should be different for different assets");
 
@@ -233,7 +234,8 @@ contract PayloadUtilsTest is Test {
 
         assertFalse(index1 == index4, "Indices should be different for different amounts");
 
-        bytes32 index5 = PayloadUtils.computeFulfillmentIndex(intentId1, asset, amount, makeAddr("different-receiver"), isCall, data);
+        bytes32 index5 =
+            PayloadUtils.computeFulfillmentIndex(intentId1, asset, amount, makeAddr("different-receiver"), isCall, data);
 
         assertFalse(index1 == index5, "Indices should be different for different receivers");
 

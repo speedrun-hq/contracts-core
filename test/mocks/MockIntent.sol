@@ -17,7 +17,10 @@ contract MockIntent is IIntent {
         return bytes32(0);
     }
 
-    function initiateCall(address, uint256, uint256, bytes calldata, uint256, uint256, bytes calldata) external returns (bytes32) {
+    function initiateCall(address, uint256, uint256, bytes calldata, uint256, uint256, bytes calldata)
+        external
+        returns (bytes32)
+    {
         return bytes32(0);
     }
 
