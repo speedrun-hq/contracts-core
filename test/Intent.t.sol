@@ -185,12 +185,14 @@ contract IntentTest is Test {
         address asset = address(token);
         uint256 amount = 50 ether;
         address receiver = user2;
+        bool isCall = false;
+        bytes memory data = "";
 
         // Expected result calculated using PayloadUtils directly
-        bytes32 expectedIndex = PayloadUtils.computeFulfillmentIndex(intentId, asset, amount, receiver);
+        bytes32 expectedIndex = PayloadUtils.computeFulfillmentIndex(intentId, asset, amount, receiver, isCall, data);
 
         // Call the function and verify result
-        bytes32 actualIndex = intent.getFulfillmentIndex(intentId, asset, amount, receiver);
+        bytes32 actualIndex = intent.getFulfillmentIndex(intentId, asset, amount, receiver, isCall, data);
 
         // Verify the computed index matches what we expect
         assertEq(actualIndex, expectedIndex, "Fulfillment index computation does not match expected value");
@@ -198,7 +200,7 @@ contract IntentTest is Test {
         // Verify it matches with the internal computation too
         assertEq(
             actualIndex,
-            keccak256(abi.encodePacked(intentId, asset, amount, receiver)),
+            keccak256(abi.encodePacked(intentId, asset, amount, receiver, isCall, data)),
             "Index doesn't match raw computation"
         );
     }

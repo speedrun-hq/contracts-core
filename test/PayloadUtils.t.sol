@@ -199,10 +199,12 @@ contract PayloadUtilsTest is Test {
         address asset = makeAddr("asset");
         uint256 amount = 1000 ether;
         address receiver = makeAddr("receiver");
+        bool isCall = false;
+        bytes memory data = "";
 
-        bytes32 index = PayloadUtils.computeFulfillmentIndex(intentId, asset, amount, receiver);
+        bytes32 index = PayloadUtils.computeFulfillmentIndex(intentId, asset, amount, receiver, isCall, data);
 
-        bytes32 expected = keccak256(abi.encodePacked(intentId, asset, amount, receiver));
+        bytes32 expected = keccak256(abi.encodePacked(intentId, asset, amount, receiver, isCall, data));
 
         assertEq(index, expected, "Fulfillment index computation failed");
     }
@@ -214,23 +216,34 @@ contract PayloadUtilsTest is Test {
         address asset = makeAddr("asset");
         uint256 amount = 1000 ether;
         address receiver = makeAddr("receiver");
+        bool isCall = false;
+        bytes memory data = "";
 
-        bytes32 index1 = PayloadUtils.computeFulfillmentIndex(intentId1, asset, amount, receiver);
+        bytes32 index1 = PayloadUtils.computeFulfillmentIndex(intentId1, asset, amount, receiver, isCall, data);
 
-        bytes32 index2 = PayloadUtils.computeFulfillmentIndex(intentId2, asset, amount, receiver);
+        bytes32 index2 = PayloadUtils.computeFulfillmentIndex(intentId2, asset, amount, receiver, isCall, data);
 
         assertFalse(index1 == index2, "Indices should be different for different intent IDs");
 
-        bytes32 index3 = PayloadUtils.computeFulfillmentIndex(intentId1, makeAddr("different-asset"), amount, receiver);
+        bytes32 index3 = PayloadUtils.computeFulfillmentIndex(intentId1, makeAddr("different-asset"), amount, receiver, isCall, data);
 
         assertFalse(index1 == index3, "Indices should be different for different assets");
 
-        bytes32 index4 = PayloadUtils.computeFulfillmentIndex(intentId1, asset, amount + 1, receiver);
+        bytes32 index4 = PayloadUtils.computeFulfillmentIndex(intentId1, asset, amount + 1, receiver, isCall, data);
 
         assertFalse(index1 == index4, "Indices should be different for different amounts");
 
-        bytes32 index5 = PayloadUtils.computeFulfillmentIndex(intentId1, asset, amount, makeAddr("different-receiver"));
+        bytes32 index5 = PayloadUtils.computeFulfillmentIndex(intentId1, asset, amount, makeAddr("different-receiver"), isCall, data);
 
         assertFalse(index1 == index5, "Indices should be different for different receivers");
+
+        // Also test with different isCall and data values
+        bytes32 index6 = PayloadUtils.computeFulfillmentIndex(intentId1, asset, amount, receiver, true, data);
+
+        assertFalse(index1 == index6, "Indices should be different for different isCall values");
+
+        bytes32 index7 = PayloadUtils.computeFulfillmentIndex(intentId1, asset, amount, receiver, isCall, "some data");
+
+        assertFalse(index1 == index7, "Indices should be different for different data values");
     }
 }
