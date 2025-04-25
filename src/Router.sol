@@ -294,7 +294,9 @@ contract Router is IRouter, Initializable, UUPSUpgradeable, AccessControlUpgrade
             targetAsset,
             receiverAddress,
             tipAfterSwap,
-            actualAmount // actual amount to transfer after all costs
+            actualAmount, // actual amount to transfer after all costs
+            intentPayload.isCall, // pass isCall from intent payload
+            intentPayload.data // pass data from intent payload
         );
 
         // Check if target chain is the current chain (ZetaChain)

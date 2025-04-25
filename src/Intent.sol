@@ -9,6 +9,7 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "./interfaces/IGateway.sol";
 import "./interfaces/IRouter.sol";
 import "./interfaces/IIntent.sol";
+import "./interfaces/IntentTarget.sol";
 import "./utils/PayloadUtils.sol";
 
 /**
@@ -56,8 +57,29 @@ contract Intent is IIntent, Initializable, UUPSUpgradeable, AccessControlUpgrade
         uint256 salt
     );
 
+    // Event emitted when a new intent with call is created
+    event IntentInitiatedWithCall(
+        bytes32 indexed intentId,
+        address indexed asset,
+        uint256 amount,
+        uint256 targetChain,
+        bytes receiver,
+        uint256 tip,
+        uint256 salt,
+        bytes data
+    );
+
     // Event emitted when an intent is fulfilled
     event IntentFulfilled(bytes32 indexed intentId, address indexed asset, uint256 amount, address indexed receiver);
+
+    // Event emitted when an intent with call is fulfilled
+    event IntentFulfilledWithCall(
+        bytes32 indexed intentId,
+        address indexed asset,
+        uint256 amount,
+        address indexed receiver,
+        bytes data
+    );
 
     // Event emitted when an intent is settled
     event IntentSettled(
@@ -69,6 +91,19 @@ contract Intent is IIntent, Initializable, UUPSUpgradeable, AccessControlUpgrade
         address fulfiller,
         uint256 actualAmount,
         uint256 paidTip
+    );
+
+    // Event emitted when an intent with call is settled
+    event IntentSettledWithCall(
+        bytes32 indexed intentId,
+        address indexed asset,
+        uint256 amount,
+        address indexed receiver,
+        bool fulfilled,
+        address fulfiller,
+        uint256 actualAmount,
+        uint256 paidTip,
+        bytes data
     );
 
     // Event emitted when the gateway is updated
@@ -151,6 +186,27 @@ contract Intent is IIntent, Initializable, UUPSUpgradeable, AccessControlUpgrade
      * @param asset The ERC20 token address
      * @param amount Amount to transfer
      * @param receiver Receiver address
+     * @param isCall Whether this is a callable intent
+     * @param data Custom data for contract calls
+     * @return The computed fulfillment index
+     */
+    function getFulfillmentIndex(
+        bytes32 intentId, 
+        address asset, 
+        uint256 amount, 
+        address receiver,
+        bool isCall,
+        bytes calldata data
+    ) public pure returns (bytes32) {
+        return PayloadUtils.computeFulfillmentIndex(intentId, asset, amount, receiver, isCall, data);
+    }
+
+    /**
+     * @dev Calculates the fulfillment index for the given parameters (backward compatibility)
+     * @param intentId The ID of the intent
+     * @param asset The ERC20 token address
+     * @param amount Amount to transfer
+     * @param receiver Receiver address
      * @return The computed fulfillment index
      */
     function getFulfillmentIndex(bytes32 intentId, address asset, uint256 amount, address receiver)
@@ -179,6 +235,45 @@ contract Intent is IIntent, Initializable, UUPSUpgradeable, AccessControlUpgrade
         uint256 tip,
         uint256 salt
     ) external whenNotPaused returns (bytes32) {
+        return _initiate(asset, amount, targetChain, receiver, tip, salt, false, "");
+    }
+
+    /**
+     * @dev Initiates a new intent for cross-chain transfer with contract call
+     * @param asset The ERC20 token address
+     * @param amount Amount to receive on target chain
+     * @param targetChain Target chain ID
+     * @param receiver Receiver address in bytes format (must implement IntentTarget)
+     * @param tip Tip for the fulfiller
+     * @param salt Salt for intent ID generation
+     * @param data Custom data to be passed to the receiver contract
+     * @return intentId The generated intent ID
+     */
+    function initiateCall(
+        address asset,
+        uint256 amount,
+        uint256 targetChain,
+        bytes calldata receiver,
+        uint256 tip,
+        uint256 salt,
+        bytes calldata data
+    ) external whenNotPaused returns (bytes32) {
+        return _initiate(asset, amount, targetChain, receiver, tip, salt, true, data);
+    }
+
+    /**
+     * @dev Internal function to initiate an intent
+     */
+    function _initiate(
+        address asset,
+        uint256 amount,
+        uint256 targetChain,
+        bytes calldata receiver,
+        uint256 tip,
+        uint256 salt,
+        bool isCall,
+        bytes memory data
+    ) internal returns (bytes32) {
         // Cannot initiate a transfer to the current chain
         require(targetChain != block.chainid, "Target chain cannot be the current chain");
 
@@ -195,7 +290,7 @@ contract Intent is IIntent, Initializable, UUPSUpgradeable, AccessControlUpgrade
         intentCounter++;
 
         // Create payload for crosschain transaction
-        bytes memory payload = PayloadUtils.encodeIntentPayload(intentId, amount, tip, targetChain, receiver);
+        bytes memory payload = PayloadUtils.encodeIntentPayload(intentId, amount, tip, targetChain, receiver, isCall, data);
 
         if (isZetaChain) {
             // ZetaChain as source - direct call to router without going through gateway
@@ -205,8 +300,12 @@ contract Intent is IIntent, Initializable, UUPSUpgradeable, AccessControlUpgrade
             _initiateFromConnectedChain(asset, totalAmount, payload);
         }
 
-        // Emit event
-        emit IntentInitiated(intentId, asset, amount, targetChain, receiver, tip, salt);
+        // Emit appropriate event
+        if (isCall) {
+            emit IntentInitiatedWithCall(intentId, asset, amount, targetChain, receiver, tip, salt, data);
+        } else {
+            emit IntentInitiated(intentId, asset, amount, targetChain, receiver, tip, salt);
+        }
 
         return intentId;
     }
@@ -269,8 +368,40 @@ contract Intent is IIntent, Initializable, UUPSUpgradeable, AccessControlUpgrade
      * @param receiver Receiver address
      */
     function fulfill(bytes32 intentId, address asset, uint256 amount, address receiver) external whenNotPaused {
+        _fulfill(intentId, asset, amount, receiver, false, "");
+    }
+
+    /**
+     * @dev Fulfills an intent by transferring tokens to the receiver and calling onFulfill
+     * @param intentId The ID of the intent to fulfill
+     * @param asset The ERC20 token address
+     * @param amount Amount to transfer
+     * @param receiver Receiver address that implements IntentTarget
+     * @param data Custom data to be passed to the receiver contract
+     */
+    function fulfillCall(
+        bytes32 intentId,
+        address asset,
+        uint256 amount,
+        address receiver,
+        bytes calldata data
+    ) external whenNotPaused {
+        _fulfill(intentId, asset, amount, receiver, true, data);
+    }
+
+    /**
+     * @dev Internal function for intent fulfillment
+     */
+    function _fulfill(
+        bytes32 intentId,
+        address asset,
+        uint256 amount,
+        address receiver,
+        bool isCall,
+        bytes memory data
+    ) internal {
         // Compute the fulfillment index
-        bytes32 fulfillmentIndex = PayloadUtils.computeFulfillmentIndex(intentId, asset, amount, receiver);
+        bytes32 fulfillmentIndex = PayloadUtils.computeFulfillmentIndex(intentId, asset, amount, receiver, isCall, data);
 
         // Check if intent is already fulfilled with these parameters
         require(fulfillments[fulfillmentIndex] == address(0), "Intent already fulfilled with these parameters");
@@ -278,14 +409,30 @@ contract Intent is IIntent, Initializable, UUPSUpgradeable, AccessControlUpgrade
         // Check if intent has already been settled
         require(!settlements[fulfillmentIndex].settled, "Intent already settled");
 
+        // If this is a call intent, verify the receiver implements IntentTarget
+        if (isCall) {
+            // The try/catch allows fulfillment to succeed even if the contract doesn't implement the interface correctly
+            // This is important because otherwise funds could get stuck
+            try IntentTarget(receiver).onFulfill(intentId, asset, amount, data) {
+                // Contract call succeeded
+            } catch {
+                // Contract call failed - we still want to continue with the token transfer
+                // to avoid the intent being blocked
+            }
+        }
+
         // Transfer tokens from the sender to the receiver
         IERC20(asset).transferFrom(msg.sender, receiver, amount);
 
         // Register the fulfillment
         fulfillments[fulfillmentIndex] = msg.sender;
 
-        // Emit event
-        emit IntentFulfilled(intentId, asset, amount, receiver);
+        // Emit appropriate event
+        if (isCall) {
+            emit IntentFulfilledWithCall(intentId, asset, amount, receiver, data);
+        } else {
+            emit IntentFulfilled(intentId, asset, amount, receiver);
+        }
     }
 
     /**
@@ -296,6 +443,8 @@ contract Intent is IIntent, Initializable, UUPSUpgradeable, AccessControlUpgrade
      * @param receiver Receiver address
      * @param tip Tip for the fulfiller
      * @param actualAmount Actual amount to transfer after fees
+     * @param isCall Whether this is a callable intent
+     * @param data Custom data for contract calls
      * @return fulfilled Whether the intent was fulfilled
      */
     function _settle(
@@ -304,10 +453,12 @@ contract Intent is IIntent, Initializable, UUPSUpgradeable, AccessControlUpgrade
         uint256 amount,
         address receiver,
         uint256 tip,
-        uint256 actualAmount
+        uint256 actualAmount,
+        bool isCall,
+        bytes memory data
     ) internal returns (bool) {
         // Compute the fulfillment index using the original amount
-        bytes32 fulfillmentIndex = PayloadUtils.computeFulfillmentIndex(intentId, asset, amount, receiver);
+        bytes32 fulfillmentIndex = PayloadUtils.computeFulfillmentIndex(intentId, asset, amount, receiver, isCall, data);
 
         // Check if intent has already been settled
         require(!settlements[fulfillmentIndex].settled, "Intent already settled");
@@ -326,19 +477,56 @@ contract Intent is IIntent, Initializable, UUPSUpgradeable, AccessControlUpgrade
         uint256 paidTip = 0;
 
         // If there's a fulfiller, transfer the actual amount + tip to them
-        // Otherwise, transfer actual amount + tip to the receiver
+        // Otherwise, transfer actual amount + tip to the receiver and call onFulfill if it's a call intent
         if (fulfilled) {
             IERC20(asset).transfer(fulfiller, actualAmount + tip);
             settlement.paidTip = tip;
             paidTip = tip;
+
+            // If this is a call intent, try to call onSettle on the receiver
+            if (isCall) {
+                try IntentTarget(receiver).onSettle(intentId, asset, amount, data, fulfillmentIndex) {
+                    // Contract call succeeded
+                } catch {
+                    // Contract call failed - we still want the settlement to succeed
+                }
+            }
         } else {
+            // Transfer tokens to the receiver
             IERC20(asset).transfer(receiver, actualAmount + tip);
+
+            // If this is a call intent and not fulfilled yet, call onFulfill
+            if (isCall) {
+                try IntentTarget(receiver).onFulfill(intentId, asset, actualAmount, data) {
+                    // Contract call succeeded
+                } catch {
+                    // Contract call failed - we still want the settlement to succeed
+                }
+            }
         }
 
-        // Emit the IntentSettled event
-        emit IntentSettled(intentId, asset, amount, receiver, fulfilled, fulfiller, actualAmount, paidTip);
+        // Emit the appropriate event
+        if (isCall) {
+            emit IntentSettledWithCall(intentId, asset, amount, receiver, fulfilled, fulfiller, actualAmount, paidTip, data);
+        } else {
+            emit IntentSettled(intentId, asset, amount, receiver, fulfilled, fulfiller, actualAmount, paidTip);
+        }
 
         return fulfilled;
+    }
+
+    /**
+     * @dev Internal compatibility function that calls the new _settle with default isCall and data
+     */
+    function _settle(
+        bytes32 intentId,
+        address asset,
+        uint256 amount,
+        address receiver,
+        uint256 tip,
+        uint256 actualAmount
+    ) internal returns (bool) {
+        return _settle(intentId, asset, amount, receiver, tip, actualAmount, false, "");
     }
 
     /**
@@ -364,7 +552,16 @@ contract Intent is IIntent, Initializable, UUPSUpgradeable, AccessControlUpgrade
         IERC20(payload.asset).transferFrom(msg.sender, address(this), totalTransfer);
 
         // Settle the intent
-        _settle(payload.intentId, payload.asset, payload.amount, payload.receiver, payload.tip, payload.actualAmount);
+        _settle(
+            payload.intentId,
+            payload.asset,
+            payload.amount,
+            payload.receiver,
+            payload.tip,
+            payload.actualAmount,
+            payload.isCall,
+            payload.data
+        );
 
         return "";
     }
