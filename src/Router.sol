@@ -5,6 +5,7 @@ import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "./interfaces/IUniswapV3Router.sol";
@@ -19,7 +20,14 @@ import "./utils/PayloadUtils.sol";
  * @title Router
  * @dev Routes CCTX and handles ZRC20 swaps on ZetaChain
  */
-contract Router is IRouter, Initializable, UUPSUpgradeable, AccessControlUpgradeable, PausableUpgradeable {
+contract Router is
+    IRouter,
+    Initializable,
+    UUPSUpgradeable,
+    AccessControlUpgradeable,
+    PausableUpgradeable,
+    ReentrancyGuardUpgradeable
+{
     using SafeERC20 for IERC20;
 
     // Role definitions
@@ -98,8 +106,9 @@ contract Router is IRouter, Initializable, UUPSUpgradeable, AccessControlUpgrade
      */
     function initialize(address _gateway, address _swapModule) public initializer {
         __AccessControl_init();
-        __UUPSUpgradeable_init();
-        __Pausable_init();
+        __UUPSUpgradeable_init_unchained();
+        __Pausable_init_unchained();
+        __ReentrancyGuard_init_unchained();
 
         require(_gateway != address(0), "Invalid gateway address");
         require(_swapModule != address(0), "Invalid swap module address");
@@ -140,9 +149,8 @@ contract Router is IRouter, Initializable, UUPSUpgradeable, AccessControlUpgrade
      */
     function updateGateway(address _gateway) external onlyRole(DEFAULT_ADMIN_ROLE) {
         require(_gateway != address(0), "Gateway cannot be zero address");
-        address oldGateway = gateway;
+        emit GatewayUpdated(gateway, _gateway);
         gateway = _gateway;
-        emit GatewayUpdated(oldGateway, _gateway);
     }
 
     /**
@@ -151,9 +159,8 @@ contract Router is IRouter, Initializable, UUPSUpgradeable, AccessControlUpgrade
      */
     function updateSwapModule(address _swapModule) external onlyRole(DEFAULT_ADMIN_ROLE) {
         require(_swapModule != address(0), "Swap module cannot be zero address");
-        address oldSwapModule = swapModule;
+        emit SwapModuleUpdated(swapModule, _swapModule);
         swapModule = _swapModule;
-        emit SwapModuleUpdated(oldSwapModule, _swapModule);
     }
 
     /**
@@ -207,7 +214,7 @@ contract Router is IRouter, Initializable, UUPSUpgradeable, AccessControlUpgrade
         address zrc20,
         uint256 amountWithTip,
         bytes calldata payload
-    ) external override onlyGatewayOrIntent whenNotPaused {
+    ) external override onlyGatewayOrIntent whenNotPaused nonReentrant {
         // Verify the call is coming from a registered intent contract
         require(intentContracts[context.chainID] == context.senderEVM, "Call must be from intent contract");
 
@@ -514,7 +521,7 @@ contract Router is IRouter, Initializable, UUPSUpgradeable, AccessControlUpgrade
 
         // Remove chainId from the array
         uint256[] storage chainIds = _tokenChainIds[name];
-        for (uint256 i = 0; i < chainIds.length; i++) {
+        for (uint256 i = 0; i < chainIds.length; ++i) {
             if (chainIds[i] == chainId) {
                 chainIds[i] = chainIds[chainIds.length - 1];
                 chainIds.pop();
@@ -565,7 +572,7 @@ contract Router is IRouter, Initializable, UUPSUpgradeable, AccessControlUpgrade
         assets = new address[](length);
         zrc20s = new address[](length);
 
-        for (uint256 i = 0; i < length; i++) {
+        for (uint256 i = 0; i < length; ++i) {
             uint256 chainId = chainIds[i];
             assets[i] = _tokenAssets[name][chainId];
             zrc20s[i] = _tokenZrc20s[name][chainId];
@@ -595,9 +602,8 @@ contract Router is IRouter, Initializable, UUPSUpgradeable, AccessControlUpgrade
      */
     function setWithdrawGasLimit(uint256 newGasLimit) public onlyRole(DEFAULT_ADMIN_ROLE) {
         require(newGasLimit > 0, "Gas limit cannot be zero");
-        uint256 oldGasLimit = withdrawGasLimit;
+        emit WithdrawGasLimitUpdated(withdrawGasLimit, newGasLimit);
         withdrawGasLimit = newGasLimit;
-        emit WithdrawGasLimitUpdated(oldGasLimit, newGasLimit);
     }
 
     /**
