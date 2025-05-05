@@ -231,7 +231,7 @@ contract Intent is
      */
     function _initiateFromZetaChain(address asset, uint256 totalAmount, bytes memory payload) internal {
         // Transfer tokens directly to the router to replicate same behavior as gateway depositAndCall
-        IERC20(asset).transfer(router, totalAmount);
+        IERC20(asset).safeTransfer(router, totalAmount);
 
         // Create ZetaChain message context
         IGateway.ZetaChainMessageContext memory context = IGateway.ZetaChainMessageContext({
