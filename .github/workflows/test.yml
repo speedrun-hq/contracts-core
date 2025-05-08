@@ -22,6 +22,8 @@ jobs:
 
       - name: Install Foundry
         uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: nightly
 
       - name: Show Forge version
         run: |
@@ -40,4 +42,15 @@ jobs:
       - name: Run Forge tests
         run: |
           forge test -vvv
-        id: test 
+        id: test
+
+      - name: Generate coverage report
+        run: |
+          forge coverage --report lcov --ir-minimum
+        id: coverage
+
+      - name: Upload coverage reports to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          file: ./lcov.info
