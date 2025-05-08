@@ -22,6 +22,8 @@ jobs:
 
       - name: Install Foundry
         uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: nightly
 
       - name: Show Forge version
         run: |
@@ -37,7 +39,15 @@ jobs:
           forge build --sizes
         id: build
 
-      - name: Run Forge tests with coverage
+      - name: Run Forge tests
+        run: |
+          forge test -vvv
+        id: test
+
+      # - name: Install lcov
+      #   run: sudo apt-get update && sudo apt-get install -y lcov
+
+      - name: Generate coverage report
         run: |
           forge coverage --report lcov
         id: coverage
