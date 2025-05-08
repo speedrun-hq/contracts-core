@@ -44,18 +44,13 @@ jobs:
           forge test -vvv
         id: test
 
-      # - name: Install lcov
-      #   run: sudo apt-get update && sudo apt-get install -y lcov
-
       - name: Generate coverage report
         run: |
           forge coverage --report lcov --ir-minimum
         id: coverage
 
-      - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v3
+      - name: Upload coverage reports to Codecov
+        uses: codecov/codecov-action@v5
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
-          files: ./lcov.info
-          fail_ci_if_error: true
-          verbose: true 
+          file: ./lcov.info
