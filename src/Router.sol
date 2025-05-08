@@ -236,39 +236,62 @@ contract Router is
         (uint256 wantedAmount, uint256 wantedTip, uint256 wantedAmountWithTip) =
             _convertAmountsForDecimals(intentPayload.amount, amountWithTip, sourceDecimals, targetDecimals);
 
+        // Check if target chain is ZetaChain
+        bool isZetaChainDestination = intentPayload.targetChain == block.chainid;
+
         // Get the appropriate gas limit for the target chain
         uint256 gasLimit = _getChainGasLimit(intentPayload.targetChain);
 
-        // Get gas fee info from target ZRC20
-        (address gasZRC20, uint256 gasFee) = IZRC20(targetZRC20).withdrawGasFeeWithGasLimit(gasLimit);
+        // Initialize gas fee variables
+        address gasZRC20 = address(0);
+        uint256 gasFee = 0;
 
-        // Approve swap module to spend tokens
-        IERC20(zrc20).approve(swapModule, amountWithTip);
+        // Only get gas fee if the destination is not ZetaChain
+        if (!isZetaChainDestination) {
+            // Get gas fee info from target ZRC20
+            (gasZRC20, gasFee) = IZRC20(targetZRC20).withdrawGasFeeWithGasLimit(gasLimit);
+        }
 
-        // Perform swap through swap module
-        uint256 amountWithTipOut =
-            ISwap(swapModule).swap(zrc20, targetZRC20, amountWithTip, gasZRC20, gasFee, zrc20ToTokenName[zrc20]);
-
-        // Calculate slippage difference and adjust tip accordingly
-        uint256 slippageAndFeeCost = wantedAmountWithTip - amountWithTipOut;
-
-        // Initialize tip and actual amount
+        // Initialize variables
+        uint256 amountWithTipOut;
         uint256 tipAfterSwap;
         uint256 actualAmount = wantedAmount;
 
-        // Check if tip covers the slippage and fee costs
-        if (wantedTip > slippageAndFeeCost) {
-            // Tip covers all costs, subtract from tip only
-            tipAfterSwap = wantedTip - slippageAndFeeCost;
+        // Check if source and target ZRC20 are the same
+        if (zrc20 == targetZRC20) {
+            // No swap needed, use original amounts
+            amountWithTipOut = amountWithTip;
+            tipAfterSwap = wantedTip;
+            // Actual amount is exactly the wanted amount
+            actualAmount = wantedAmount;
         } else {
-            // Tip doesn't cover costs, use it all and reduce the amount
-            tipAfterSwap = 0;
-            // Calculate how much remaining slippage to cover from the amount
-            uint256 remainingCost = slippageAndFeeCost - wantedTip;
-            // Ensure the amount is greater than the remaining cost, otherwise fail
-            require(wantedAmount > remainingCost, "Amount insufficient to cover costs after tip");
-            // Reduce the actual amount by the remaining cost
-            actualAmount = wantedAmount - remainingCost;
+            // Approve swap module to spend tokens
+            IERC20(zrc20).approve(swapModule, amountWithTip);
+
+            // Perform swap through swap module
+            amountWithTipOut =
+                ISwap(swapModule).swap(zrc20, targetZRC20, amountWithTip, gasZRC20, gasFee, zrc20ToTokenName[zrc20]);
+
+            // Validate that swap result is not greater than expected amount
+            require(wantedAmountWithTip >= amountWithTipOut, "Swap returned invalid amount");
+
+            // Calculate slippage difference and adjust tip accordingly
+            uint256 slippageAndFeeCost = wantedAmountWithTip - amountWithTipOut;
+
+            // Check if tip covers the slippage and fee costs
+            if (wantedTip > slippageAndFeeCost) {
+                // Tip covers all costs, subtract from tip only
+                tipAfterSwap = wantedTip - slippageAndFeeCost;
+            } else {
+                // Tip doesn't cover costs, use it all and reduce the amount
+                tipAfterSwap = 0;
+                // Calculate how much remaining slippage to cover from the amount
+                uint256 remainingCost = slippageAndFeeCost - wantedTip;
+                // Ensure the amount is greater than the remaining cost, otherwise fail
+                require(wantedAmount > remainingCost, "Amount insufficient to cover costs after tip");
+                // Reduce the actual amount by the remaining cost
+                actualAmount = wantedAmount - remainingCost;
+            }
         }
 
         // Convert receiver from bytes to address
@@ -285,7 +308,7 @@ contract Router is
         );
 
         // Check if target chain is the current chain (ZetaChain)
-        if (intentPayload.targetChain == block.chainid) {
+        if (isZetaChainDestination) {
             // Process settlement directly on ZetaChain
             _processChainsSettlementOnZetaChain(intentContract, targetZRC20, amountWithTipOut, settlementPayload);
         } else {

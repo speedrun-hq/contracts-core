@@ -230,8 +230,8 @@ contract Intent is
      * @param payload The encoded intent payload
      */
     function _initiateFromZetaChain(address asset, uint256 totalAmount, bytes memory payload) internal {
-        // Approve router to spend the tokens
-        IERC20(asset).approve(router, totalAmount);
+        // Transfer tokens directly to the router to replicate same behavior as gateway depositAndCall
+        IERC20(asset).safeTransfer(router, totalAmount);
 
         // Create ZetaChain message context
         IGateway.ZetaChainMessageContext memory context = IGateway.ZetaChainMessageContext({
@@ -376,9 +376,9 @@ contract Intent is
         // Decode settlement payload
         PayloadUtils.SettlementPayload memory payload = PayloadUtils.decodeSettlementPayload(message);
 
-        // Transfer tokens from gateway to this contract
+        // Transfer tokens to the contract
         uint256 totalTransfer = payload.actualAmount + payload.tip;
-        IERC20(payload.asset).safeTransferFrom(gateway, address(this), totalTransfer);
+        IERC20(payload.asset).safeTransferFrom(msg.sender, address(this), totalTransfer);
 
         // Settle the intent
         _settle(payload.intentId, payload.asset, payload.amount, payload.receiver, payload.tip, payload.actualAmount);
