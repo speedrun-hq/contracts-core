@@ -16,3 +16,6 @@ remappings = [
 
 [rpc_endpoints]
 local = "http://localhost:8545"
+
+[coverage]
+report_filetype = "lcov"
