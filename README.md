@@ -1,5 +1,7 @@
 # Speedrun EVM Contracts
 
+[![codecov](https://codecov.io/gh/speedrun-hq/contracts-core/branch/main/graph/badge.svg)](https://codecov.io/gh/speedrun-hq/contracts-core)
+
 This repository holds all the smart contracts for the Speedrun protocol deployed on EVM chains - including ZetaChain.
 
 ## Intent Contract Interface
