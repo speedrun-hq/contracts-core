@@ -272,6 +272,9 @@ contract Router is
             amountWithTipOut =
                 ISwap(swapModule).swap(zrc20, targetZRC20, amountWithTip, gasZRC20, gasFee, zrc20ToTokenName[zrc20]);
 
+            // Validate that swap result is not greater than expected amount
+            require(wantedAmountWithTip >= amountWithTipOut, "Swap returned invalid amount");
+
             // Calculate slippage difference and adjust tip accordingly
             uint256 slippageAndFeeCost = wantedAmountWithTip - amountWithTipOut;
 

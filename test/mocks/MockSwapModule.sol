@@ -10,8 +10,15 @@ contract MockSwapModule is ISwap {
     uint256 public slippage = 0; // 0 = no slippage (1:1 swap), higher means more slippage
     bool public useDecimalAdjustment = false; // Flag to enable/disable decimal adjustment
 
+    // Allow to set a custom amount out for testing
+    uint256 customAmountOut = 0;
+
     function setSlippage(uint256 _slippage) external {
         slippage = _slippage;
+    }
+
+    function setCustomAmountOut(uint256 _customAmountOut) external {
+        customAmountOut = _customAmountOut;
     }
 
     function swap(address tokenIn, address tokenOut, uint256 amountIn, address gasZRC20, uint256 gasFee)
@@ -41,6 +48,11 @@ contract MockSwapModule is ISwap {
         // Only transfer gas fee if gasZRC20 is not zero address
         if (gasZRC20 != address(0) && gasFee > 0) {
             IERC20(gasZRC20).transfer(msg.sender, gasFee);
+        }
+
+        // Allow to set a custom amount out for testing
+        if (customAmountOut > 0) {
+            amountOut = customAmountOut;
         }
 
         return amountOut;
@@ -75,6 +87,11 @@ contract MockSwapModule is ISwap {
         // Only transfer gas fee if gasZRC20 is not zero address
         if (gasZRC20 != address(0) && gasFee > 0) {
             IERC20(gasZRC20).transfer(msg.sender, gasFee);
+        }
+
+        // Allow to set a custom amount out for testing
+        if (customAmountOut > 0) {
+            amountOut = customAmountOut;
         }
 
         return amountOut;
