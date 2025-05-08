@@ -49,7 +49,7 @@ jobs:
 
       - name: Generate coverage report
         run: |
-          forge coverage --report lcov
+          forge coverage --report lcov --ir-minimum
         id: coverage
 
       - name: Upload coverage to Codecov
