@@ -38,54 +38,90 @@ contract SwapUniswapV2 is ISwap {
         // Transfer tokens from sender to this contract
         IERC20(tokenIn).safeTransferFrom(msg.sender, address(this), amountIn);
 
-        // First swap: from input token to ZETA
-        IERC20(tokenIn).approve(address(swapRouter), amountIn);
-        address[] memory path1 = new address[](2);
-        path1[0] = tokenIn;
-        path1[1] = wzeta;
-        uint256[] memory amounts1 = swapRouter.swapExactTokensForTokens(
-            amountIn,
-            0, // Accept any amount of ZETA
-            path1,
-            address(this),
-            block.timestamp + 15 minutes
-        );
-        uint256 zetaAmount = amounts1[1];
+        // Step 1: Swap input token to WZETA
+        uint256 zetaAmount = _swapToWZETA(tokenIn, amountIn);
 
-        // Swap ZETA for gas fee token
-        IERC20(wzeta).approve(address(swapRouter), zetaAmount);
-        address[] memory gasPath = new address[](2);
-        gasPath[0] = wzeta;
-        gasPath[1] = gasZRC20;
-        uint256[] memory gasAmounts = swapRouter.swapTokensForExactTokens(
-            gasFee,
-            zetaAmount, // Use all ZETA if needed
-            gasPath,
+        // Step 2: Swap WZETA for gas fee token and send it back
+        uint256 zetaUsedForGas = _swapForGas(gasZRC20, gasFee, zetaAmount);
+
+        // Step 3: Swap remaining WZETA to target token
+        uint256 remainingZeta = zetaAmount - zetaUsedForGas;
+        amountOut = _swapWZETAToTarget(tokenOut, remainingZeta);
+
+        // Transfer output tokens to sender
+        IERC20(tokenOut).safeTransfer(msg.sender, amountOut);
+    }
+
+    /**
+     * @dev Swaps input token to WZETA
+     * @param tokenIn The input token address
+     * @param amountIn The amount of input token
+     * @return Amount of WZETA received
+     */
+    function _swapToWZETA(address tokenIn, uint256 amountIn) internal returns (uint256) {
+        IERC20(tokenIn).approve(address(swapRouter), amountIn);
+
+        address[] memory path = new address[](2);
+        path[0] = tokenIn;
+        path[1] = wzeta;
+
+        uint256[] memory amounts = swapRouter.swapExactTokensForTokens(
+            amountIn,
+            0, // Accept any amount of WZETA
+            path,
             address(this),
             block.timestamp + 15 minutes
         );
-        uint256 zetaUsedForGas = gasAmounts[0];
+
+        return amounts[1]; // WZETA amount received
+    }
+
+    /**
+     * @dev Swaps WZETA for gas fee token and transfers it to sender
+     * @param gasZRC20 The gas token address
+     * @param gasFee The amount of gas fee needed
+     * @param maxZetaAmount The maximum amount of WZETA to use
+     * @return Amount of WZETA used for gas
+     */
+    function _swapForGas(address gasZRC20, uint256 gasFee, uint256 maxZetaAmount) internal returns (uint256) {
+        IERC20(wzeta).approve(address(swapRouter), maxZetaAmount);
+
+        address[] memory path = new address[](2);
+        path[0] = wzeta;
+        path[1] = gasZRC20;
+
+        uint256[] memory amounts = swapRouter.swapTokensForExactTokens(
+            gasFee, maxZetaAmount, path, address(this), block.timestamp + 15 minutes
+        );
 
         // Transfer gas fee tokens back to sender
         IERC20(gasZRC20).safeTransfer(msg.sender, gasFee);
 
-        // Second swap: remaining ZETA to target token
-        uint256 remainingZeta = zetaAmount - zetaUsedForGas;
-        IERC20(wzeta).approve(address(swapRouter), remainingZeta);
-        address[] memory path2 = new address[](2);
-        path2[0] = wzeta;
-        path2[1] = tokenOut;
-        uint256[] memory amounts2 = swapRouter.swapExactTokensForTokens(
-            remainingZeta,
+        return amounts[0]; // WZETA amount used for gas
+    }
+
+    /**
+     * @dev Swaps WZETA to target token
+     * @param tokenOut The output token address
+     * @param zetaAmount The amount of WZETA to swap
+     * @return Amount of output tokens received
+     */
+    function _swapWZETAToTarget(address tokenOut, uint256 zetaAmount) internal returns (uint256) {
+        IERC20(wzeta).approve(address(swapRouter), zetaAmount);
+
+        address[] memory path = new address[](2);
+        path[0] = wzeta;
+        path[1] = tokenOut;
+
+        uint256[] memory amounts = swapRouter.swapExactTokensForTokens(
+            zetaAmount,
             0, // Accept any amount of output token
-            path2,
+            path,
             address(this),
             block.timestamp + 15 minutes
         );
-        amountOut = amounts2[1];
 
-        // Transfer output tokens to sender
-        IERC20(tokenOut).safeTransfer(msg.sender, amountOut);
+        return amounts[1]; // Output token amount
     }
 
     /**

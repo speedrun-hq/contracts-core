@@ -30,6 +30,29 @@ contract Router is
 {
     using SafeERC20 for IERC20;
 
+    // Contains info for a settlement after intent is processed
+    struct SettlementInfo {
+        address intentContract;
+        uint256 wantedAmount;
+        address targetAsset;
+        uint256 tipAfterSwap;
+        uint256 actualAmount;
+        uint256 amountWithTipOut;
+        address targetZRC20;
+        address gasZRC20;
+        uint256 gasFee;
+        uint256 gasLimit;
+    }
+
+    // Contains input parameters for processing an intent
+    struct IntentInformation {
+        IGateway.ZetaChainMessageContext context;
+        PayloadUtils.IntentPayload intentPayload;
+        address zrc20;
+        uint256 amountWithTip;
+        bool isZetaChainDestination;
+    }
+
     // Role definitions
     // Removed ADMIN_ROLE and using only DEFAULT_ADMIN_ROLE
     bytes32 public constant PAUSER_ROLE = keccak256("PAUSER_ROLE");
@@ -215,84 +238,23 @@ contract Router is
         uint256 amountWithTip,
         bytes calldata payload
     ) external override onlyGatewayOrIntent whenNotPaused nonReentrant {
-        // Verify the call is coming from a registered intent contract
-        require(intentContracts[context.chainID] == context.senderEVM, "Call must be from intent contract");
-
         // Decode intent payload
         PayloadUtils.IntentPayload memory intentPayload = PayloadUtils.decodeIntentPayload(payload);
-
-        // Get token association for target chain
-        (address targetAsset, address targetZRC20,) = getTokenAssociation(zrc20, intentPayload.targetChain);
-
-        // Get intent contract on target chain
-        address intentContract = intentContracts[intentPayload.targetChain];
-        require(intentContract != address(0), "Intent contract not set for target chain");
-
-        // Get decimals for source and target tokens
-        uint8 sourceDecimals = IZRC20(zrc20).decimals();
-        uint8 targetDecimals = IZRC20(targetZRC20).decimals();
-
-        // Convert amounts to target token decimal representation
-        (uint256 wantedAmount, uint256 wantedTip, uint256 wantedAmountWithTip) =
-            _convertAmountsForDecimals(intentPayload.amount, amountWithTip, sourceDecimals, targetDecimals);
 
         // Check if target chain is ZetaChain
         bool isZetaChainDestination = intentPayload.targetChain == block.chainid;
 
-        // Get the appropriate gas limit for the target chain
-        uint256 gasLimit = _getChainGasLimit(intentPayload.targetChain);
+        // Create intent information struct
+        IntentInformation memory intentInfo = IntentInformation({
+            context: context,
+            intentPayload: intentPayload,
+            zrc20: zrc20,
+            amountWithTip: amountWithTip,
+            isZetaChainDestination: isZetaChainDestination
+        });
 
-        // Initialize gas fee variables
-        address gasZRC20 = address(0);
-        uint256 gasFee = 0;
-
-        // Only get gas fee if the destination is not ZetaChain
-        if (!isZetaChainDestination) {
-            // Get gas fee info from target ZRC20
-            (gasZRC20, gasFee) = IZRC20(targetZRC20).withdrawGasFeeWithGasLimit(gasLimit);
-        }
-
-        // Initialize variables
-        uint256 amountWithTipOut;
-        uint256 tipAfterSwap;
-        uint256 actualAmount = wantedAmount;
-
-        // Check if source and target ZRC20 are the same
-        if (zrc20 == targetZRC20) {
-            // No swap needed, use original amounts
-            amountWithTipOut = amountWithTip;
-            tipAfterSwap = wantedTip;
-            // Actual amount is exactly the wanted amount
-            actualAmount = wantedAmount;
-        } else {
-            // Approve swap module to spend tokens
-            IERC20(zrc20).approve(swapModule, amountWithTip);
-
-            // Perform swap through swap module
-            amountWithTipOut =
-                ISwap(swapModule).swap(zrc20, targetZRC20, amountWithTip, gasZRC20, gasFee, zrc20ToTokenName[zrc20]);
-
-            // Validate that swap result is not greater than expected amount
-            require(wantedAmountWithTip >= amountWithTipOut, "Swap returned invalid amount");
-
-            // Calculate slippage difference and adjust tip accordingly
-            uint256 slippageAndFeeCost = wantedAmountWithTip - amountWithTipOut;
-
-            // Check if tip covers the slippage and fee costs
-            if (wantedTip > slippageAndFeeCost) {
-                // Tip covers all costs, subtract from tip only
-                tipAfterSwap = wantedTip - slippageAndFeeCost;
-            } else {
-                // Tip doesn't cover costs, use it all and reduce the amount
-                tipAfterSwap = 0;
-                // Calculate how much remaining slippage to cover from the amount
-                uint256 remainingCost = slippageAndFeeCost - wantedTip;
-                // Ensure the amount is greater than the remaining cost, otherwise fail
-                require(wantedAmount > remainingCost, "Amount insufficient to cover costs after tip");
-                // Reduce the actual amount by the remaining cost
-                actualAmount = wantedAmount - remainingCost;
-            }
-        }
+        // Process intent and get settlement info
+        SettlementInfo memory settlementInfo = _processIntent(intentInfo);
 
         // Convert receiver from bytes to address
         address receiverAddress = PayloadUtils.bytesToAddress(intentPayload.receiver);
@@ -300,34 +262,136 @@ contract Router is
         // Encode settlement payload
         bytes memory settlementPayload = PayloadUtils.encodeSettlementPayload(
             intentPayload.intentId,
-            wantedAmount, // amount for index computation
-            targetAsset,
+            settlementInfo.wantedAmount, // amount for index computation
+            settlementInfo.targetAsset,
             receiverAddress,
-            tipAfterSwap,
-            actualAmount // actual amount to transfer after all costs
+            settlementInfo.tipAfterSwap,
+            settlementInfo.actualAmount // actual amount to transfer after all costs
         );
 
-        // Check if target chain is the current chain (ZetaChain)
         if (isZetaChainDestination) {
             // Process settlement directly on ZetaChain
-            _processChainsSettlementOnZetaChain(intentContract, targetZRC20, amountWithTipOut, settlementPayload);
+            _processChainsSettlementOnZetaChain(
+                settlementInfo.intentContract,
+                settlementInfo.targetZRC20,
+                settlementInfo.amountWithTipOut,
+                settlementPayload
+            );
         } else {
             // Process settlement for connected chains
             _processChainsSettlementOnConnectedChain(
-                intentContract,
-                targetZRC20,
-                gasZRC20,
-                amountWithTipOut,
-                gasFee,
+                settlementInfo.intentContract,
+                settlementInfo.targetZRC20,
+                settlementInfo.gasZRC20,
+                settlementInfo.amountWithTipOut,
+                settlementInfo.gasFee,
                 settlementPayload,
                 receiverAddress,
-                gasLimit
+                settlementInfo.gasLimit
             );
         }
 
         emit IntentSettlementForwarded(
-            context.sender, context.chainID, intentPayload.targetChain, zrc20, amountWithTip, tipAfterSwap
+            context.sender,
+            context.chainID,
+            intentPayload.targetChain,
+            zrc20,
+            amountWithTip,
+            settlementInfo.tipAfterSwap
         );
+    }
+
+    /**
+     * @dev Internal function to process the intent, convert amounts, and returns the settlement info
+     * @param intentInfo The struct containing all intent processing information
+     */
+    function _processIntent(IntentInformation memory intentInfo)
+        internal
+        returns (SettlementInfo memory settlementInfo)
+    {
+        // Verify the call is coming from a registered intent contract
+        require(
+            intentContracts[intentInfo.context.chainID] == intentInfo.context.senderEVM,
+            "Call must be from intent contract"
+        );
+
+        // Get token association for target chain
+        (settlementInfo.targetAsset, settlementInfo.targetZRC20,) =
+            getTokenAssociation(intentInfo.zrc20, intentInfo.intentPayload.targetChain);
+
+        // Get intent contract on target chain
+        settlementInfo.intentContract = intentContracts[intentInfo.intentPayload.targetChain];
+        require(settlementInfo.intentContract != address(0), "Intent contract not set for target chain");
+
+        // Get decimals for source and target tokens
+        uint8 sourceDecimals = IZRC20(intentInfo.zrc20).decimals();
+        uint8 targetDecimals = IZRC20(settlementInfo.targetZRC20).decimals();
+
+        // Convert amounts to target token decimal representation
+        uint256 wantedAmountWithTip;
+        uint256 wantedTip;
+        (settlementInfo.wantedAmount, wantedTip, wantedAmountWithTip) = _convertAmountsForDecimals(
+            intentInfo.intentPayload.amount, intentInfo.amountWithTip, sourceDecimals, targetDecimals
+        );
+
+        // Get the appropriate gas limit for the target chain
+        settlementInfo.gasLimit = _getChainGasLimit(intentInfo.intentPayload.targetChain);
+
+        // Initialize gas fee variables
+        settlementInfo.gasZRC20 = address(0);
+        settlementInfo.gasFee = 0;
+
+        // Only get gas fee if the destination is not ZetaChain
+        if (!intentInfo.isZetaChainDestination) {
+            // Get gas fee info from target ZRC20
+            (settlementInfo.gasZRC20, settlementInfo.gasFee) =
+                IZRC20(settlementInfo.targetZRC20).withdrawGasFeeWithGasLimit(settlementInfo.gasLimit);
+        }
+
+        // Check if source and target ZRC20 are the same
+        if (intentInfo.zrc20 == settlementInfo.targetZRC20) {
+            // No swap needed, use original amounts
+            settlementInfo.amountWithTipOut = intentInfo.amountWithTip;
+            settlementInfo.tipAfterSwap = wantedTip;
+            // Actual amount is exactly the wanted amount
+            settlementInfo.actualAmount = settlementInfo.wantedAmount;
+        } else {
+            // Approve swap module to spend tokens
+            IERC20(intentInfo.zrc20).approve(swapModule, intentInfo.amountWithTip);
+
+            // Perform swap through swap module
+            settlementInfo.amountWithTipOut = ISwap(swapModule).swap(
+                intentInfo.zrc20,
+                settlementInfo.targetZRC20,
+                intentInfo.amountWithTip,
+                settlementInfo.gasZRC20,
+                settlementInfo.gasFee,
+                zrc20ToTokenName[intentInfo.zrc20]
+            );
+
+            // Validate that swap result is not greater than expected amount
+            require(wantedAmountWithTip >= settlementInfo.amountWithTipOut, "Swap returned invalid amount");
+
+            // Calculate slippage difference and adjust tip accordingly
+            uint256 slippageAndFeeCost = wantedAmountWithTip - settlementInfo.amountWithTipOut;
+
+            // Check if tip covers the slippage and fee costs
+            if (wantedTip > slippageAndFeeCost) {
+                // Tip covers all costs, subtract from tip only
+                settlementInfo.tipAfterSwap = wantedTip - slippageAndFeeCost;
+            } else {
+                // Tip doesn't cover costs, use it all and reduce the amount
+                settlementInfo.tipAfterSwap = 0;
+                // Calculate how much remaining slippage to cover from the amount
+                uint256 remainingCost = slippageAndFeeCost - wantedTip;
+                // Ensure the amount is greater than the remaining cost, otherwise fail
+                require(settlementInfo.wantedAmount > remainingCost, "Amount insufficient to cover costs after tip");
+                // Reduce the actual amount by the remaining cost
+                settlementInfo.actualAmount = settlementInfo.wantedAmount - remainingCost;
+            }
+        }
+
+        return settlementInfo;
     }
 
     /**
