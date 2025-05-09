@@ -1,6 +1,7 @@
 # Compiler files
 cache/
 out/
+.idea
 
 # Ignores development broadcast logs
 /broadcast
@@ -14,3 +15,7 @@ docs/
 .env
 
 .DS_Store
+
+# Coverage reports
+lcov.info
+coverage/

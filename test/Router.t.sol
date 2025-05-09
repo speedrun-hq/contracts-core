@@ -96,6 +96,22 @@ contract RouterTest is Test {
         );
     }
 
+    function test_Initialize_InvalidGatewayAddress() public {
+        Router implementation = new Router();
+        ERC1967Proxy proxy = new ERC1967Proxy(address(implementation), "");
+        Router router_ = Router(address(proxy));
+        vm.expectRevert("Invalid gateway address");
+        router_.initialize(address(0), address(swapModule));
+    }
+
+    function test_Initialize_InvalidSwapModuleAddress() public {
+        Router implementation = new Router();
+        ERC1967Proxy proxy = new ERC1967Proxy(address(implementation), "");
+        Router router_ = Router(address(proxy));
+        vm.expectRevert("Invalid swap module address");
+        router_.initialize(address(gateway), address(0));
+    }
+
     function test_SetIntentContract() public {
         uint256 chainId = 1;
         router.setIntentContract(chainId, user1);
@@ -676,11 +692,40 @@ contract RouterTest is Test {
         );
     }
 
+    function test_UpdateGateway_Success() public {
+        address newGateway = makeAddr("newGateway");
+        router.updateGateway(newGateway);
+        assertEq(router.gateway(), newGateway);
+    }
+
     function test_UpdateGateway_NonAdminReverts() public {
         address newGateway = makeAddr("newGateway");
         vm.prank(user1);
         expectAccessControlError(user1);
         router.updateGateway(newGateway);
+    }
+
+    function test_UpdateGateway_InvalidGatewayAddress() public {
+        vm.expectRevert("Gateway cannot be zero address");
+        router.updateGateway(address(0));
+    }
+
+    function test_UpdateSwapModule_Success() public {
+        address newSwapModule = makeAddr("newSwapModule");
+        router.updateSwapModule(newSwapModule);
+        assertEq(router.swapModule(), newSwapModule);
+    }
+
+    function test_UdateSwapModule_NonAdminReverts() public {
+        address newSwapModule = makeAddr("newSwapModule");
+        vm.prank(user1);
+        expectAccessControlError(user1);
+        router.updateSwapModule(newSwapModule);
+    }
+
+    function test_UpdateSwapModule_InvalidSwapModuleAddress() public {
+        vm.expectRevert("Swap module cannot be zero address");
+        router.updateSwapModule(address(0));
     }
 
     function test_Pause_Basic() public {
@@ -1267,5 +1312,65 @@ contract RouterTest is Test {
         // Verify actual amount equals wanted amount (no reduction)
         // This is implicit in the event emission check above but would be
         // even better with an explicit check of the settlement payload
+    }
+
+    function test_OnCall_InvalidSwapAmountOut() public {
+        // Setup intent contract
+        uint256 sourceChainId = 1;
+        uint256 targetChainId = 2;
+        address sourceIntentContract = makeAddr("sourceIntentContract");
+        address targetIntentContract = makeAddr("targetIntentContract");
+        router.setIntentContract(sourceChainId, sourceIntentContract);
+        router.setIntentContract(targetChainId, targetIntentContract);
+
+        // Setup token associations
+        string memory tokenName = "USDC";
+        router.addToken(tokenName);
+        address inputAsset = makeAddr("input_asset");
+        address targetAsset = makeAddr("target_asset");
+        router.addTokenAssociation(tokenName, sourceChainId, inputAsset, address(inputToken));
+        router.addTokenAssociation(tokenName, targetChainId, targetAsset, address(targetZRC20));
+
+        // Setup intent payload
+        bytes32 intentId = keccak256("test-intent");
+        uint256 amount = 100 ether;
+        uint256 tip = 10 ether;
+        bytes memory receiver = abi.encodePacked(user2);
+
+        bytes memory intentPayloadBytes =
+            PayloadUtils.encodeIntentPayload(intentId, amount, tip, targetChainId, receiver);
+
+        // Set modest slippage (5%)
+        swapModule.setSlippage(500);
+
+        // Set a custom amount out for testing that is more than the wanted amount
+        swapModule.setCustomAmountOut(amount + tip + 1 ether);
+
+        // Mock setup for IZRC20 withdrawGasFeeWithGasLimit
+        uint256 gasFee = 1 ether;
+        vm.mockCall(
+            address(targetZRC20),
+            abi.encodeWithSelector(IZRC20.withdrawGasFeeWithGasLimit.selector, router.withdrawGasLimit()),
+            abi.encode(address(gasZRC20), gasFee)
+        );
+
+        // Mint tokens to make the test work
+        // Input token goes to the router
+        inputToken.mint(address(router), amount + tip);
+        // Target token and gas token go to the swap module since they're returned from the swap
+        targetZRC20.mint(address(swapModule), amount + tip);
+        gasZRC20.mint(address(swapModule), gasFee);
+
+        // Setup context
+        IGateway.ZetaChainMessageContext memory context = IGateway.ZetaChainMessageContext({
+            chainID: sourceChainId,
+            sender: abi.encodePacked(sourceIntentContract),
+            senderEVM: sourceIntentContract
+        });
+
+        // Call onCall
+        vm.prank(address(gateway));
+        vm.expectRevert("Swap returned invalid amount");
+        router.onCall(context, address(inputToken), amount + tip, intentPayloadBytes);
     }
 }

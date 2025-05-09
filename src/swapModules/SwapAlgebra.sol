@@ -258,12 +258,7 @@ contract SwapAlgebra is ISwap, Ownable {
         address token0 = IAlgebraPool(pool).token0();
         bool zeroToOne = tokenIn == token0;
 
-        // Approve the tokens for the pool - use max approval to ensure no issues
-        uint256 currentAllowance = IERC20(tokenIn).allowance(address(this), pool);
-        if (currentAllowance < amountIn) {
-            IERC20(tokenIn).approve(pool, 0); // Clear any previous allowance
-            IERC20(tokenIn).approve(pool, type(uint256).max); // Approve max amount
-        }
+        IERC20(tokenIn).approve(pool, amountIn);
 
         // (uint160 currentPrice, , , , , , ) = IAlgebraPool(pool).globalState();
         uint160 limitSqrtPrice = getValidLimitSqrtPrice(zeroToOne);

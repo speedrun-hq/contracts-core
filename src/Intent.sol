@@ -5,7 +5,9 @@ import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "./interfaces/IGateway.sol";
 import "./interfaces/IRouter.sol";
 import "./interfaces/IIntent.sol";
@@ -16,7 +18,16 @@ import "./utils/PayloadUtils.sol";
  * @title Intent
  * @dev Handles intent-based transfers across chains
  */
-contract Intent is IIntent, Initializable, UUPSUpgradeable, AccessControlUpgradeable, PausableUpgradeable {
+contract Intent is
+    IIntent,
+    Initializable,
+    UUPSUpgradeable,
+    AccessControlUpgradeable,
+    PausableUpgradeable,
+    ReentrancyGuardUpgradeable
+{
+    using SafeERC20 for IERC20;
+
     // Role definitions
     bytes32 public constant PAUSER_ROLE = keccak256("PAUSER_ROLE");
 
@@ -143,8 +154,9 @@ contract Intent is IIntent, Initializable, UUPSUpgradeable, AccessControlUpgrade
 
     function initialize(address _gateway, address _router) public initializer {
         __AccessControl_init();
-        __UUPSUpgradeable_init();
-        __Pausable_init();
+        __UUPSUpgradeable_init_unchained();
+        __Pausable_init_unchained();
+        __ReentrancyGuard_init_unchained();
 
         // Set up admin role
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
@@ -277,13 +289,13 @@ contract Intent is IIntent, Initializable, UUPSUpgradeable, AccessControlUpgrade
         uint256 totalAmount = amount + tip;
 
         // Transfer ERC20 tokens from sender to this contract
-        IERC20(asset).transferFrom(msg.sender, address(this), totalAmount);
+        IERC20(asset).safeTransferFrom(msg.sender, address(this), totalAmount);
 
         // Generate intent ID using the computeIntentId function with current chain ID
         bytes32 intentId = computeIntentId(intentCounter, salt, block.chainid);
 
         // Increment counter
-        intentCounter++;
+        ++intentCounter;
 
         // Create payload for crosschain transaction
         bytes memory payload =
@@ -315,7 +327,7 @@ contract Intent is IIntent, Initializable, UUPSUpgradeable, AccessControlUpgrade
      */
     function _initiateFromZetaChain(address asset, uint256 totalAmount, bytes memory payload) internal {
         // Transfer tokens directly to the router to replicate same behavior as gateway depositAndCall
-        IERC20(asset).transfer(router, totalAmount);
+        IERC20(asset).safeTransfer(router, totalAmount);
 
         // Create ZetaChain message context
         IGateway.ZetaChainMessageContext memory context = IGateway.ZetaChainMessageContext({
@@ -411,7 +423,7 @@ contract Intent is IIntent, Initializable, UUPSUpgradeable, AccessControlUpgrade
         }
 
         // Transfer tokens from the sender to the receiver
-        IERC20(asset).transferFrom(msg.sender, receiver, amount);
+        IERC20(asset).safeTransferFrom(msg.sender, receiver, amount);
 
         // Register the fulfillment
         fulfillments[fulfillmentIndex] = msg.sender;
@@ -468,9 +480,10 @@ contract Intent is IIntent, Initializable, UUPSUpgradeable, AccessControlUpgrade
         // If there's a fulfiller, transfer the actual amount + tip to them
         // Otherwise, transfer actual amount + tip to the receiver and call onFulfill if it's a call intent
         if (fulfilled) {
-            IERC20(asset).transfer(fulfiller, actualAmount + tip);
             settlement.paidTip = tip;
             paidTip = tip;
+
+            IERC20(asset).safeTransfer(fulfiller, actualAmount + tip);
 
             // If this is a call intent, try to call onSettle on the receiver
             if (isCall) {
@@ -482,7 +495,7 @@ contract Intent is IIntent, Initializable, UUPSUpgradeable, AccessControlUpgrade
             }
         } else {
             // Transfer tokens to the receiver
-            IERC20(asset).transfer(receiver, actualAmount + tip);
+            IERC20(asset).safeTransfer(receiver, actualAmount + tip);
 
             // If this is a call intent and not fulfilled yet, call onFulfill
             if (isCall) {
@@ -530,6 +543,7 @@ contract Intent is IIntent, Initializable, UUPSUpgradeable, AccessControlUpgrade
         external
         payable
         onlyGatewayOrRouter
+        nonReentrant
         returns (bytes memory)
     {
         // Verify sender is the router
@@ -540,7 +554,7 @@ contract Intent is IIntent, Initializable, UUPSUpgradeable, AccessControlUpgrade
 
         // Transfer tokens to the contract
         uint256 totalTransfer = payload.actualAmount + payload.tip;
-        IERC20(payload.asset).transferFrom(msg.sender, address(this), totalTransfer);
+        IERC20(payload.asset).safeTransferFrom(msg.sender, address(this), totalTransfer);
 
         // Settle the intent
         _settle(
@@ -563,9 +577,8 @@ contract Intent is IIntent, Initializable, UUPSUpgradeable, AccessControlUpgrade
      */
     function updateGateway(address _gateway) external onlyRole(DEFAULT_ADMIN_ROLE) {
         require(_gateway != address(0), "Gateway cannot be zero address");
-        address oldGateway = gateway;
+        emit GatewayUpdated(gateway, _gateway);
         gateway = _gateway;
-        emit GatewayUpdated(oldGateway, _gateway);
     }
 
     /**
@@ -574,8 +587,7 @@ contract Intent is IIntent, Initializable, UUPSUpgradeable, AccessControlUpgrade
      */
     function updateRouter(address _router) external onlyRole(DEFAULT_ADMIN_ROLE) {
         require(_router != address(0), "Router cannot be zero address");
-        address oldRouter = router;
+        emit RouterUpdated(router, _router);
         router = _router;
-        emit RouterUpdated(oldRouter, _router);
     }
 }

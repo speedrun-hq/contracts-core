@@ -5,6 +5,7 @@ import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "./interfaces/IUniswapV3Router.sol";
@@ -19,8 +20,38 @@ import "./utils/PayloadUtils.sol";
  * @title Router
  * @dev Routes CCTX and handles ZRC20 swaps on ZetaChain
  */
-contract Router is IRouter, Initializable, UUPSUpgradeable, AccessControlUpgradeable, PausableUpgradeable {
+contract Router is
+    IRouter,
+    Initializable,
+    UUPSUpgradeable,
+    AccessControlUpgradeable,
+    PausableUpgradeable,
+    ReentrancyGuardUpgradeable
+{
     using SafeERC20 for IERC20;
+
+    // Contains info for a settlement after intent is processed
+    struct SettlementInfo {
+        address intentContract;
+        uint256 wantedAmount;
+        address targetAsset;
+        uint256 tipAfterSwap;
+        uint256 actualAmount;
+        uint256 amountWithTipOut;
+        address targetZRC20;
+        address gasZRC20;
+        uint256 gasFee;
+        uint256 gasLimit;
+    }
+
+    // Contains input parameters for processing an intent
+    struct IntentInformation {
+        IGateway.ZetaChainMessageContext context;
+        PayloadUtils.IntentPayload intentPayload;
+        address zrc20;
+        uint256 amountWithTip;
+        bool isZetaChainDestination;
+    }
 
     // Role definitions
     // Removed ADMIN_ROLE and using only DEFAULT_ADMIN_ROLE
@@ -98,8 +129,9 @@ contract Router is IRouter, Initializable, UUPSUpgradeable, AccessControlUpgrade
      */
     function initialize(address _gateway, address _swapModule) public initializer {
         __AccessControl_init();
-        __UUPSUpgradeable_init();
-        __Pausable_init();
+        __UUPSUpgradeable_init_unchained();
+        __Pausable_init_unchained();
+        __ReentrancyGuard_init_unchained();
 
         require(_gateway != address(0), "Invalid gateway address");
         require(_swapModule != address(0), "Invalid swap module address");
@@ -140,9 +172,8 @@ contract Router is IRouter, Initializable, UUPSUpgradeable, AccessControlUpgrade
      */
     function updateGateway(address _gateway) external onlyRole(DEFAULT_ADMIN_ROLE) {
         require(_gateway != address(0), "Gateway cannot be zero address");
-        address oldGateway = gateway;
+        emit GatewayUpdated(gateway, _gateway);
         gateway = _gateway;
-        emit GatewayUpdated(oldGateway, _gateway);
     }
 
     /**
@@ -151,9 +182,8 @@ contract Router is IRouter, Initializable, UUPSUpgradeable, AccessControlUpgrade
      */
     function updateSwapModule(address _swapModule) external onlyRole(DEFAULT_ADMIN_ROLE) {
         require(_swapModule != address(0), "Swap module cannot be zero address");
-        address oldSwapModule = swapModule;
+        emit SwapModuleUpdated(swapModule, _swapModule);
         swapModule = _swapModule;
-        emit SwapModuleUpdated(oldSwapModule, _swapModule);
     }
 
     /**
@@ -207,20 +237,23 @@ contract Router is IRouter, Initializable, UUPSUpgradeable, AccessControlUpgrade
         address zrc20,
         uint256 amountWithTip,
         bytes calldata payload
-    ) external override onlyGatewayOrIntent whenNotPaused {
-        // Verify the call is coming from a registered intent contract
-        require(intentContracts[context.chainID] == context.senderEVM, "Call must be from intent contract");
-
+    ) external override onlyGatewayOrIntent whenNotPaused nonReentrant {
         // Decode intent payload
         PayloadUtils.IntentPayload memory intentPayload = PayloadUtils.decodeIntentPayload(payload);
 
-        // Get token association for target chain
-        (address targetAsset, address targetZRC20,) = getTokenAssociation(zrc20, intentPayload.targetChain);
+        // Check if target chain is ZetaChain
+        bool isZetaChainDestination = intentPayload.targetChain == block.chainid;
 
-        // Get intent contract on target chain
-        address intentContract = intentContracts[intentPayload.targetChain];
-        require(intentContract != address(0), "Intent contract not set for target chain");
+        // Create intent information struct
+        IntentInformation memory intentInfo = IntentInformation({
+            context: context,
+            intentPayload: intentPayload,
+            zrc20: zrc20,
+            amountWithTip: amountWithTip,
+            isZetaChainDestination: isZetaChainDestination
+        });
 
+<<<<<<< HEAD
         // Get decimals for source and target tokens
         uint8 sourceDecimals = IZRC20(zrc20).decimals();
         uint8 targetDecimals = IZRC20(targetZRC20).decimals();
@@ -283,6 +316,10 @@ contract Router is IRouter, Initializable, UUPSUpgradeable, AccessControlUpgrade
                 actualAmount = wantedAmount - remainingCost;
             }
         }
+=======
+        // Process intent and get settlement info
+        SettlementInfo memory settlementInfo = _processIntent(intentInfo);
+>>>>>>> main
 
         // Convert receiver from bytes to address
         address receiverAddress = PayloadUtils.bytesToAddress(intentPayload.receiver);
@@ -290,9 +327,10 @@ contract Router is IRouter, Initializable, UUPSUpgradeable, AccessControlUpgrade
         // Encode settlement payload
         bytes memory settlementPayload = PayloadUtils.encodeSettlementPayload(
             intentPayload.intentId,
-            wantedAmount, // amount for index computation
-            targetAsset,
+            settlementInfo.wantedAmount, // amount for index computation
+            settlementInfo.targetAsset,
             receiverAddress,
+<<<<<<< HEAD
             tipAfterSwap,
             actualAmount, // actual amount to transfer after all costs
             intentPayload.isCall, // pass isCall from intent payload
@@ -300,26 +338,135 @@ contract Router is IRouter, Initializable, UUPSUpgradeable, AccessControlUpgrade
         );
 
         // Check if target chain is the current chain (ZetaChain)
+=======
+            settlementInfo.tipAfterSwap,
+            settlementInfo.actualAmount // actual amount to transfer after all costs
+        );
+
+>>>>>>> main
         if (isZetaChainDestination) {
             // Process settlement directly on ZetaChain
-            _processChainsSettlementOnZetaChain(intentContract, targetZRC20, amountWithTipOut, settlementPayload);
+            _processChainsSettlementOnZetaChain(
+                settlementInfo.intentContract,
+                settlementInfo.targetZRC20,
+                settlementInfo.amountWithTipOut,
+                settlementPayload
+            );
         } else {
             // Process settlement for connected chains
             _processChainsSettlementOnConnectedChain(
-                intentContract,
-                targetZRC20,
-                gasZRC20,
-                amountWithTipOut,
-                gasFee,
+                settlementInfo.intentContract,
+                settlementInfo.targetZRC20,
+                settlementInfo.gasZRC20,
+                settlementInfo.amountWithTipOut,
+                settlementInfo.gasFee,
                 settlementPayload,
                 receiverAddress,
-                gasLimit
+                settlementInfo.gasLimit
             );
         }
 
         emit IntentSettlementForwarded(
-            context.sender, context.chainID, intentPayload.targetChain, zrc20, amountWithTip, tipAfterSwap
+            context.sender,
+            context.chainID,
+            intentPayload.targetChain,
+            zrc20,
+            amountWithTip,
+            settlementInfo.tipAfterSwap
         );
+    }
+
+    /**
+     * @dev Internal function to process the intent, convert amounts, and returns the settlement info
+     * @param intentInfo The struct containing all intent processing information
+     */
+    function _processIntent(IntentInformation memory intentInfo)
+        internal
+        returns (SettlementInfo memory settlementInfo)
+    {
+        // Verify the call is coming from a registered intent contract
+        require(
+            intentContracts[intentInfo.context.chainID] == intentInfo.context.senderEVM,
+            "Call must be from intent contract"
+        );
+
+        // Get token association for target chain
+        (settlementInfo.targetAsset, settlementInfo.targetZRC20,) =
+            getTokenAssociation(intentInfo.zrc20, intentInfo.intentPayload.targetChain);
+
+        // Get intent contract on target chain
+        settlementInfo.intentContract = intentContracts[intentInfo.intentPayload.targetChain];
+        require(settlementInfo.intentContract != address(0), "Intent contract not set for target chain");
+
+        // Get decimals for source and target tokens
+        uint8 sourceDecimals = IZRC20(intentInfo.zrc20).decimals();
+        uint8 targetDecimals = IZRC20(settlementInfo.targetZRC20).decimals();
+
+        // Convert amounts to target token decimal representation
+        uint256 wantedAmountWithTip;
+        uint256 wantedTip;
+        (settlementInfo.wantedAmount, wantedTip, wantedAmountWithTip) = _convertAmountsForDecimals(
+            intentInfo.intentPayload.amount, intentInfo.amountWithTip, sourceDecimals, targetDecimals
+        );
+
+        // Get the appropriate gas limit for the target chain
+        settlementInfo.gasLimit = _getChainGasLimit(intentInfo.intentPayload.targetChain);
+
+        // Initialize gas fee variables
+        settlementInfo.gasZRC20 = address(0);
+        settlementInfo.gasFee = 0;
+
+        // Only get gas fee if the destination is not ZetaChain
+        if (!intentInfo.isZetaChainDestination) {
+            // Get gas fee info from target ZRC20
+            (settlementInfo.gasZRC20, settlementInfo.gasFee) =
+                IZRC20(settlementInfo.targetZRC20).withdrawGasFeeWithGasLimit(settlementInfo.gasLimit);
+        }
+
+        // Check if source and target ZRC20 are the same
+        if (intentInfo.zrc20 == settlementInfo.targetZRC20) {
+            // No swap needed, use original amounts
+            settlementInfo.amountWithTipOut = intentInfo.amountWithTip;
+            settlementInfo.tipAfterSwap = wantedTip;
+            // Actual amount is exactly the wanted amount
+            settlementInfo.actualAmount = settlementInfo.wantedAmount;
+        } else {
+            // Approve swap module to spend tokens
+            IERC20(intentInfo.zrc20).approve(swapModule, intentInfo.amountWithTip);
+
+            // Perform swap through swap module
+            settlementInfo.amountWithTipOut = ISwap(swapModule).swap(
+                intentInfo.zrc20,
+                settlementInfo.targetZRC20,
+                intentInfo.amountWithTip,
+                settlementInfo.gasZRC20,
+                settlementInfo.gasFee,
+                zrc20ToTokenName[intentInfo.zrc20]
+            );
+
+            // Validate that swap result is not greater than expected amount
+            require(wantedAmountWithTip >= settlementInfo.amountWithTipOut, "Swap returned invalid amount");
+
+            // Calculate slippage difference and adjust tip accordingly
+            uint256 slippageAndFeeCost = wantedAmountWithTip - settlementInfo.amountWithTipOut;
+
+            // Check if tip covers the slippage and fee costs
+            if (wantedTip > slippageAndFeeCost) {
+                // Tip covers all costs, subtract from tip only
+                settlementInfo.tipAfterSwap = wantedTip - slippageAndFeeCost;
+            } else {
+                // Tip doesn't cover costs, use it all and reduce the amount
+                settlementInfo.tipAfterSwap = 0;
+                // Calculate how much remaining slippage to cover from the amount
+                uint256 remainingCost = slippageAndFeeCost - wantedTip;
+                // Ensure the amount is greater than the remaining cost, otherwise fail
+                require(settlementInfo.wantedAmount > remainingCost, "Amount insufficient to cover costs after tip");
+                // Reduce the actual amount by the remaining cost
+                settlementInfo.actualAmount = settlementInfo.wantedAmount - remainingCost;
+            }
+        }
+
+        return settlementInfo;
     }
 
     /**
@@ -516,7 +663,7 @@ contract Router is IRouter, Initializable, UUPSUpgradeable, AccessControlUpgrade
 
         // Remove chainId from the array
         uint256[] storage chainIds = _tokenChainIds[name];
-        for (uint256 i = 0; i < chainIds.length; i++) {
+        for (uint256 i = 0; i < chainIds.length; ++i) {
             if (chainIds[i] == chainId) {
                 chainIds[i] = chainIds[chainIds.length - 1];
                 chainIds.pop();
@@ -567,7 +714,7 @@ contract Router is IRouter, Initializable, UUPSUpgradeable, AccessControlUpgrade
         assets = new address[](length);
         zrc20s = new address[](length);
 
-        for (uint256 i = 0; i < length; i++) {
+        for (uint256 i = 0; i < length; ++i) {
             uint256 chainId = chainIds[i];
             assets[i] = _tokenAssets[name][chainId];
             zrc20s[i] = _tokenZrc20s[name][chainId];
@@ -597,9 +744,8 @@ contract Router is IRouter, Initializable, UUPSUpgradeable, AccessControlUpgrade
      */
     function setWithdrawGasLimit(uint256 newGasLimit) public onlyRole(DEFAULT_ADMIN_ROLE) {
         require(newGasLimit > 0, "Gas limit cannot be zero");
-        uint256 oldGasLimit = withdrawGasLimit;
+        emit WithdrawGasLimitUpdated(withdrawGasLimit, newGasLimit);
         withdrawGasLimit = newGasLimit;
-        emit WithdrawGasLimitUpdated(oldGasLimit, newGasLimit);
     }
 
     /**
