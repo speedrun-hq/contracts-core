@@ -266,9 +266,12 @@ contract Router is
             settlementInfo.targetAsset,
             receiverAddress,
             settlementInfo.tipAfterSwap,
-            settlementInfo.actualAmount // actual amount to transfer after all costs
+            settlementInfo.actualAmount, // actual amount to transfer after all costs
+            intentPayload.isCall, // pass isCall from intent payload
+            intentPayload.data // pass data from intent payload
         );
 
+        // Check if target chain is the current chain (ZetaChain)
         if (isZetaChainDestination) {
             // Process settlement directly on ZetaChain
             _processChainsSettlementOnZetaChain(
