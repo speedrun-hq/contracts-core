@@ -96,6 +96,22 @@ contract RouterTest is Test {
         );
     }
 
+    function test_Initialize_InvalidGatewayAddress() public {
+        Router implementation = new Router();
+        ERC1967Proxy proxy = new ERC1967Proxy(address(implementation), "");
+        Router router_ = Router(address(proxy));
+        vm.expectRevert("Invalid gateway address");
+        router_.initialize(address(0), address(swapModule));
+    }
+
+    function test_Initialize_InvalidSwapModuleAddress() public {
+        Router implementation = new Router();
+        ERC1967Proxy proxy = new ERC1967Proxy(address(implementation), "");
+        Router router_ = Router(address(proxy));
+        vm.expectRevert("Invalid swap module address");
+        router_.initialize(address(gateway), address(0));
+    }
+
     function test_SetIntentContract() public {
         uint256 chainId = 1;
         router.setIntentContract(chainId, user1);
