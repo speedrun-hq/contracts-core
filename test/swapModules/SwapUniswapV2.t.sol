@@ -138,6 +138,16 @@ contract SwapUniswapV2Test is Test {
         gasToken.mint(address(mockRouter), AMOUNT);
     }
 
+    function test_DeployInvalidRouterAddress() public {
+        vm.expectRevert("Invalid swap router address");
+        new SwapUniswapV2(address(0), address(wzeta));
+    }
+
+    function test_DeployInvalidWzetaAddress() public {
+        vm.expectRevert("Invalid WZETA address");
+        new SwapUniswapV2(address(mockRouter), address(0));
+    }
+
     function test_Swap() public {
         uint256 initialBalance = inputToken.balanceOf(user);
         uint256 expectedOutput = AMOUNT - GAS_FEE; // 1:1 swap with gas fee deduction
@@ -171,5 +181,20 @@ contract SwapUniswapV2Test is Test {
         assertEq(inputToken.balanceOf(address(swapUniswapV2)), 0, "Input tokens should not remain in swap contract");
         assertEq(outputToken.balanceOf(user), expectedOutput, "Output tokens not received by user");
         assertEq(gasToken.balanceOf(address(swapUniswapV2)), 0, "Gas tokens should not be received");
+    }
+
+    function test_SwapWithIgnoredTokenName() public {
+        uint256 initialBalance = inputToken.balanceOf(user);
+        uint256 expectedOutput = AMOUNT - GAS_FEE; // 1:1 swap with gas fee deduction
+
+        vm.prank(user);
+        uint256 amountOut =
+            swapUniswapV2.swap(address(inputToken), address(outputToken), AMOUNT, address(gasToken), GAS_FEE, "ignored");
+
+        assertEq(amountOut, expectedOutput, "Incorrect output amount");
+        assertEq(inputToken.balanceOf(user), initialBalance - AMOUNT, "Input tokens not transferred from user");
+        assertEq(inputToken.balanceOf(address(swapUniswapV2)), 0, "Input tokens should not remain in swap contract");
+        assertEq(outputToken.balanceOf(user), expectedOutput, "Output tokens not received by user");
+        assertEq(gasToken.balanceOf(user), GAS_FEE, "Gas tokens not received by swap contract");
     }
 }
