@@ -234,8 +234,30 @@ contract Intent is
      * @param tip Tip for the fulfiller
      * @param salt Salt for intent ID generation
      * @return intentId The generated intent ID
+     * @notice This function is maintained for backward compatibility - use initiateTransfer instead
      */
     function initiate(
+        address asset,
+        uint256 amount,
+        uint256 targetChain,
+        bytes calldata receiver,
+        uint256 tip,
+        uint256 salt
+    ) external whenNotPaused returns (bytes32) {
+        return _initiate(asset, amount, targetChain, receiver, tip, salt, false, "");
+    }
+
+    /**
+     * @dev Initiates a new intent for cross-chain transfer
+     * @param asset The ERC20 token address
+     * @param amount Amount to receive on target chain
+     * @param targetChain Target chain ID
+     * @param receiver Receiver address in bytes format
+     * @param tip Tip for the fulfiller
+     * @param salt Salt for intent ID generation
+     * @return intentId The generated intent ID
+     */
+    function initiateTransfer(
         address asset,
         uint256 amount,
         uint256 targetChain,

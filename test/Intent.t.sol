@@ -361,6 +361,100 @@ contract IntentTest is Test {
         intent.initiate(address(token), amount, targetChain, receiver, tip, salt);
     }
 
+    function test_InitiateTransfer() public {
+        // Test parameters
+        uint256 amount = 100 ether;
+        uint256 tip = 10 ether;
+        uint256 targetChain = 1;
+        bytes memory receiver = abi.encodePacked(user2);
+        uint256 salt = 123;
+        uint256 currentChainId = block.chainid;
+
+        // Mint tokens for initiateTransfer
+        token.mint(user1, amount + tip);
+        vm.prank(user1);
+        token.approve(address(intent), amount + tip);
+
+        // Expect the IntentInitiated event
+        vm.expectEmit(true, true, false, false);
+        emit IntentInitiated(
+            intent.computeIntentId(0, salt, currentChainId), // First intent ID with chainId
+            address(token),
+            amount,
+            targetChain,
+            receiver,
+            tip,
+            salt
+        );
+
+        // Call initiateTransfer
+        vm.prank(user1);
+        bytes32 intentId = intent.initiateTransfer(address(token), amount, targetChain, receiver, tip, salt);
+
+        // Verify intent ID
+        assertEq(intentId, intent.computeIntentId(0, salt, currentChainId));
+
+        // Verify gateway received the correct amount
+        assertEq(token.balanceOf(address(gateway)), amount + tip);
+
+        // Verify gateway call data
+        (address callReceiver, uint256 callAmount, address callAsset, bytes memory callPayload,) = gateway.lastCall();
+        assertEq(callReceiver, router);
+        assertEq(callAmount, amount + tip);
+        assertEq(callAsset, address(token));
+
+        // Verify payload
+        PayloadUtils.IntentPayload memory payload = PayloadUtils.decodeIntentPayload(callPayload);
+        assertEq(payload.intentId, intentId);
+        assertEq(payload.amount, amount);
+        assertEq(payload.tip, tip);
+        assertEq(payload.targetChain, targetChain);
+        assertEq(keccak256(payload.receiver), keccak256(receiver));
+    }
+
+    function test_InitiateTransfer_ComparingWithInitiate() public {
+        // Test parameters
+        uint256 amount = 100 ether;
+        uint256 tip = 10 ether;
+        uint256 targetChain = 1;
+        bytes memory receiver = abi.encodePacked(user2);
+        uint256 salt = 123;
+        
+        // Prepare for first intent (initiate)
+        uint256 initialCounter = intent.intentCounter();
+        token.mint(user1, amount + tip);
+        vm.prank(user1);
+        token.approve(address(intent), amount + tip);
+        
+        // Call initiate
+        vm.prank(user1);
+        bytes32 initiateId = intent.initiate(address(token), amount, targetChain, receiver, tip, salt);
+        
+        // Prepare for second intent (initiateTransfer)
+        uint256 secondCounter = intent.intentCounter();
+        token.mint(user1, amount + tip);
+        vm.prank(user1);
+        token.approve(address(intent), amount + tip);
+        
+        // Call initiateTransfer
+        vm.prank(user1);
+        bytes32 transferId = intent.initiateTransfer(address(token), amount, targetChain, receiver, tip, salt);
+        
+        // Verify that both functions increment the counter the same way
+        assertEq(secondCounter - initialCounter, 1, "initiate should increment counter by 1");
+        assertEq(intent.intentCounter() - secondCounter, 1, "initiateTransfer should increment counter by 1");
+        
+        // Verify intent IDs follow the same pattern
+        bytes32 expectedInitiateId = intent.computeIntentId(initialCounter, salt, block.chainid);
+        bytes32 expectedTransferId = intent.computeIntentId(secondCounter, salt, block.chainid);
+        
+        assertEq(initiateId, expectedInitiateId, "initiate ID calculation should match");
+        assertEq(transferId, expectedTransferId, "initiateTransfer ID calculation should match");
+
+        // Verify gateway received the correct amount from both calls
+        assertEq(token.balanceOf(address(gateway)), (amount + tip) * 2);
+    }
+
     function test_Fulfill() public {
         // First create an intent
         uint256 amount = 100 ether;
