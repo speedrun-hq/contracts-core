@@ -28,6 +28,18 @@ contract MockIntent is IIntent {
         return bytes32(0);
     }
 
+    function fulfill(bytes32, address, uint256, address) external {
+        // Empty implementation
+    }
+
+    function fulfillTransfer(bytes32, address, uint256, address) external {
+        // Empty implementation
+    }
+
+    function fulfillCall(bytes32, address, uint256, address, bytes calldata) external {
+        // Empty implementation
+    }
+
     /**
      * @dev Mock implementation of onCall function to record the parameters
      * @param context The message context containing sender information

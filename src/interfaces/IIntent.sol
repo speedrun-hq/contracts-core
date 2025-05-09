@@ -71,6 +71,35 @@ interface IIntent {
     ) external returns (bytes32);
 
     /**
+     * @dev Fulfills an intent by transferring tokens to the receiver (backward compatibility)
+     * @param intentId The ID of the intent to fulfill
+     * @param asset The ERC20 token address
+     * @param amount Amount to transfer
+     * @param receiver Receiver address
+     */
+    function fulfill(bytes32 intentId, address asset, uint256 amount, address receiver) external;
+
+    /**
+     * @dev Fulfills an intent by transferring tokens to the receiver
+     * @param intentId The ID of the intent to fulfill
+     * @param asset The ERC20 token address
+     * @param amount Amount to transfer
+     * @param receiver Receiver address
+     */
+    function fulfillTransfer(bytes32 intentId, address asset, uint256 amount, address receiver) external;
+
+    /**
+     * @dev Fulfills an intent by transferring tokens to the receiver and calling onFulfill
+     * @param intentId The ID of the intent to fulfill
+     * @param asset The ERC20 token address
+     * @param amount Amount to transfer
+     * @param receiver Receiver address that implements IntentTarget
+     * @param data Custom data to be passed to the receiver contract
+     */
+    function fulfillCall(bytes32 intentId, address asset, uint256 amount, address receiver, bytes calldata data)
+        external;
+
+    /**
      * @dev Handles incoming cross-chain messages
      * @param context Message context containing sender information
      * @param message Encoded settlement payload

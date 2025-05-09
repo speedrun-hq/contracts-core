@@ -397,8 +397,23 @@ contract Intent is
      * @param asset The ERC20 token address
      * @param amount Amount to transfer
      * @param receiver Receiver address
+     * @notice This function is maintained for backward compatibility - use fulfillTransfer instead
      */
     function fulfill(bytes32 intentId, address asset, uint256 amount, address receiver) external whenNotPaused {
+        _fulfill(intentId, asset, amount, receiver, false, "");
+    }
+
+    /**
+     * @dev Fulfills an intent by transferring tokens to the receiver
+     * @param intentId The ID of the intent to fulfill
+     * @param asset The ERC20 token address
+     * @param amount Amount to transfer
+     * @param receiver Receiver address
+     */
+    function fulfillTransfer(bytes32 intentId, address asset, uint256 amount, address receiver)
+        external
+        whenNotPaused
+    {
         _fulfill(intentId, asset, amount, receiver, false, "");
     }
 

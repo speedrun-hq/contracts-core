@@ -419,35 +419,35 @@ contract IntentTest is Test {
         uint256 targetChain = 1;
         bytes memory receiver = abi.encodePacked(user2);
         uint256 salt = 123;
-        
+
         // Prepare for first intent (initiate)
         uint256 initialCounter = intent.intentCounter();
         token.mint(user1, amount + tip);
         vm.prank(user1);
         token.approve(address(intent), amount + tip);
-        
+
         // Call initiate
         vm.prank(user1);
         bytes32 initiateId = intent.initiate(address(token), amount, targetChain, receiver, tip, salt);
-        
+
         // Prepare for second intent (initiateTransfer)
         uint256 secondCounter = intent.intentCounter();
         token.mint(user1, amount + tip);
         vm.prank(user1);
         token.approve(address(intent), amount + tip);
-        
+
         // Call initiateTransfer
         vm.prank(user1);
         bytes32 transferId = intent.initiateTransfer(address(token), amount, targetChain, receiver, tip, salt);
-        
+
         // Verify that both functions increment the counter the same way
         assertEq(secondCounter - initialCounter, 1, "initiate should increment counter by 1");
         assertEq(intent.intentCounter() - secondCounter, 1, "initiateTransfer should increment counter by 1");
-        
+
         // Verify intent IDs follow the same pattern
         bytes32 expectedInitiateId = intent.computeIntentId(initialCounter, salt, block.chainid);
         bytes32 expectedTransferId = intent.computeIntentId(secondCounter, salt, block.chainid);
-        
+
         assertEq(initiateId, expectedInitiateId, "initiate ID calculation should match");
         assertEq(transferId, expectedTransferId, "initiateTransfer ID calculation should match");
 
@@ -490,6 +490,89 @@ contract IntentTest is Test {
 
         // Verify tokens were transferred from user1 to user2
         assertEq(token.balanceOf(user2), amount);
+    }
+
+    function test_FulfillTransfer() public {
+        // First create an intent
+        uint256 amount = 100 ether;
+        uint256 tip = 10 ether;
+        uint256 targetChain = 1;
+        bytes memory receiver = abi.encodePacked(user2);
+        uint256 salt = 123;
+
+        // Mint tokens for initiate
+        token.mint(user1, amount + tip);
+        vm.prank(user1);
+        token.approve(address(intent), amount + tip);
+
+        vm.prank(user1);
+        bytes32 intentId = intent.initiate(address(token), amount, targetChain, receiver, tip, salt);
+
+        // Mint tokens to the fulfiller (user1) and approve them for the intent contract
+        token.mint(user1, amount);
+        vm.prank(user1);
+        token.approve(address(intent), amount);
+
+        // Expect the IntentFulfilled event
+        vm.expectEmit(true, true, false, true);
+        emit IntentFulfilled(intentId, address(token), amount, user2);
+
+        // Call fulfillTransfer
+        vm.prank(user1);
+        intent.fulfillTransfer(intentId, address(token), amount, user2);
+
+        // Verify fulfillment was registered
+        bytes32 fulfillmentIndex = PayloadUtils.computeFulfillmentIndex(intentId, address(token), amount, user2);
+        assertEq(intent.fulfillments(fulfillmentIndex), user1);
+
+        // Verify tokens were transferred from user1 to user2
+        assertEq(token.balanceOf(user2), amount);
+    }
+
+    function test_FulfillTransfer_ComparingWithFulfill() public {
+        // Create two intents for testing
+        uint256 amount = 100 ether;
+        uint256 tip = 10 ether;
+        uint256 targetChain = 1;
+        bytes memory receiver = abi.encodePacked(user2);
+        uint256 salt1 = 123;
+        uint256 salt2 = 456;
+
+        // Mint tokens for initiating both intents
+        token.mint(user1, (amount + tip) * 2);
+        vm.prank(user1);
+        token.approve(address(intent), (amount + tip) * 2);
+
+        // Initiate first intent
+        vm.prank(user1);
+        bytes32 intentId1 = intent.initiate(address(token), amount, targetChain, receiver, tip, salt1);
+
+        // Initiate second intent
+        vm.prank(user1);
+        bytes32 intentId2 = intent.initiate(address(token), amount, targetChain, receiver, tip, salt2);
+
+        // Mint tokens for fulfillment
+        token.mint(user1, amount * 2);
+        vm.prank(user1);
+        token.approve(address(intent), amount * 2);
+
+        // Fulfill first intent with fulfill
+        vm.prank(user1);
+        intent.fulfill(intentId1, address(token), amount, user2);
+
+        // Fulfill second intent with fulfillTransfer
+        vm.prank(user1);
+        intent.fulfillTransfer(intentId2, address(token), amount, user2);
+
+        // Verify both fulfillments were registered
+        bytes32 fulfillIndex1 = PayloadUtils.computeFulfillmentIndex(intentId1, address(token), amount, user2);
+        bytes32 fulfillIndex2 = PayloadUtils.computeFulfillmentIndex(intentId2, address(token), amount, user2);
+
+        assertEq(intent.fulfillments(fulfillIndex1), user1, "fulfill should register user1 as fulfiller");
+        assertEq(intent.fulfillments(fulfillIndex2), user1, "fulfillTransfer should register user1 as fulfiller");
+
+        // Verify user2 received tokens from both fulfillments
+        assertEq(token.balanceOf(user2), amount * 2, "User2 should receive tokens from both fulfillments");
     }
 
     function test_FulfillAlreadyFulfilled() public {
