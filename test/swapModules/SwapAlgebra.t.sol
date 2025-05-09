@@ -250,6 +250,21 @@ contract SwapAlgebraTest is Test {
         intermediaryToken.mint(address(this), AMOUNT * 10);
     }
 
+    function test_DeployInvalidFactoryAddress() public {
+        vm.expectRevert("Invalid Algebra factory address");
+        new SwapAlgebra(address(0), address(mockUniswapV2Router), address(wzeta));
+    }
+
+    function test_DeployInvalidRouterAddress() public {
+        vm.expectRevert("Invalid Uniswap V2 router address");
+        new SwapAlgebra(address(mockAlgebraFactory), address(0), address(wzeta));
+    }
+
+    function test_DeployInvalidWzetaAddress() public {
+        vm.expectRevert("Invalid WZETA address");
+        new SwapAlgebra(address(mockAlgebraFactory), address(mockUniswapV2Router), address(0));
+    }
+
     function test_SwapWithGasFee() public {
         uint256 initialBalance = inputToken.balanceOf(user);
         uint256 expectedOutput = AMOUNT - GAS_FEE; // 1:1 swap with gas fee deduction
@@ -411,5 +426,10 @@ contract SwapAlgebraTest is Test {
         vm.prank(nonOwner);
         vm.expectRevert(abi.encodeWithSelector(OwnableUnauthorizedAccount.selector, nonOwner));
         swapAlgebra.setIntermediaryToken("ANOTHER_TOKEN", address(outputToken));
+    }
+
+    function test_RevertWhenIntermediaryTokenIsZeroAddress() public {
+        vm.expectRevert("Invalid intermediary token address");
+        swapAlgebra.setIntermediaryToken(TOKEN_NAME, address(0));
     }
 }
