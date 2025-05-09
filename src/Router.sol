@@ -253,73 +253,8 @@ contract Router is
             isZetaChainDestination: isZetaChainDestination
         });
 
-<<<<<<< HEAD
-        // Get decimals for source and target tokens
-        uint8 sourceDecimals = IZRC20(zrc20).decimals();
-        uint8 targetDecimals = IZRC20(targetZRC20).decimals();
-
-        // Convert amounts to target token decimal representation
-        (uint256 wantedAmount, uint256 wantedTip, uint256 wantedAmountWithTip) =
-            _convertAmountsForDecimals(intentPayload.amount, amountWithTip, sourceDecimals, targetDecimals);
-
-        // Check if target chain is ZetaChain
-        bool isZetaChainDestination = intentPayload.targetChain == block.chainid;
-
-        // Get the appropriate gas limit for the target chain
-        uint256 gasLimit = _getChainGasLimit(intentPayload.targetChain);
-
-        // Initialize gas fee variables
-        address gasZRC20 = address(0);
-        uint256 gasFee = 0;
-
-        // Only get gas fee if the destination is not ZetaChain
-        if (!isZetaChainDestination) {
-            // Get gas fee info from target ZRC20
-            (gasZRC20, gasFee) = IZRC20(targetZRC20).withdrawGasFeeWithGasLimit(gasLimit);
-        }
-
-        // Initialize variables
-        uint256 amountWithTipOut;
-        uint256 tipAfterSwap;
-        uint256 actualAmount = wantedAmount;
-
-        // Check if source and target ZRC20 are the same
-        if (zrc20 == targetZRC20) {
-            // No swap needed, use original amounts
-            amountWithTipOut = amountWithTip;
-            tipAfterSwap = wantedTip;
-            // Actual amount is exactly the wanted amount
-            actualAmount = wantedAmount;
-        } else {
-            // Approve swap module to spend tokens
-            IERC20(zrc20).approve(swapModule, amountWithTip);
-
-            // Perform swap through swap module
-            amountWithTipOut =
-                ISwap(swapModule).swap(zrc20, targetZRC20, amountWithTip, gasZRC20, gasFee, zrc20ToTokenName[zrc20]);
-
-            // Calculate slippage difference and adjust tip accordingly
-            uint256 slippageAndFeeCost = wantedAmountWithTip - amountWithTipOut;
-
-            // Check if tip covers the slippage and fee costs
-            if (wantedTip > slippageAndFeeCost) {
-                // Tip covers all costs, subtract from tip only
-                tipAfterSwap = wantedTip - slippageAndFeeCost;
-            } else {
-                // Tip doesn't cover costs, use it all and reduce the amount
-                tipAfterSwap = 0;
-                // Calculate how much remaining slippage to cover from the amount
-                uint256 remainingCost = slippageAndFeeCost - wantedTip;
-                // Ensure the amount is greater than the remaining cost, otherwise fail
-                require(wantedAmount > remainingCost, "Amount insufficient to cover costs after tip");
-                // Reduce the actual amount by the remaining cost
-                actualAmount = wantedAmount - remainingCost;
-            }
-        }
-=======
         // Process intent and get settlement info
         SettlementInfo memory settlementInfo = _processIntent(intentInfo);
->>>>>>> main
 
         // Convert receiver from bytes to address
         address receiverAddress = PayloadUtils.bytesToAddress(intentPayload.receiver);
@@ -330,20 +265,13 @@ contract Router is
             settlementInfo.wantedAmount, // amount for index computation
             settlementInfo.targetAsset,
             receiverAddress,
-<<<<<<< HEAD
-            tipAfterSwap,
-            actualAmount, // actual amount to transfer after all costs
+            settlementInfo.tipAfterSwap,
+            settlementInfo.actualAmount, // actual amount to transfer after all costs
             intentPayload.isCall, // pass isCall from intent payload
             intentPayload.data // pass data from intent payload
         );
 
         // Check if target chain is the current chain (ZetaChain)
-=======
-            settlementInfo.tipAfterSwap,
-            settlementInfo.actualAmount // actual amount to transfer after all costs
-        );
-
->>>>>>> main
         if (isZetaChainDestination) {
             // Process settlement directly on ZetaChain
             _processChainsSettlementOnZetaChain(
