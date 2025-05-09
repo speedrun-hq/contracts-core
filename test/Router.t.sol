@@ -715,14 +715,14 @@ contract RouterTest is Test {
         router.updateSwapModule(newSwapModule);
         assertEq(router.swapModule(), newSwapModule);
     }
-    
+
     function test_UdateSwapModule_NonAdminReverts() public {
         address newSwapModule = makeAddr("newSwapModule");
         vm.prank(user1);
         expectAccessControlError(user1);
         router.updateSwapModule(newSwapModule);
     }
-    
+
     function test_UpdateSwapModule_InvalidSwapModuleAddress() public {
         vm.expectRevert("Swap module cannot be zero address");
         router.updateSwapModule(address(0));
