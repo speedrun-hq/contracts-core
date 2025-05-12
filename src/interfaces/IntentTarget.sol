@@ -22,7 +22,14 @@ interface IntentTarget {
      * @param amount Amount transferred
      * @param data Custom data for execution
      * @param fulfillmentIndex The fulfillment index for this intent
+     * @param isFulfilled Whether the intent was fulfilled before settlement
      */
-    function onSettle(bytes32 intentId, address asset, uint256 amount, bytes calldata data, bytes32 fulfillmentIndex)
-        external;
+    function onSettle(
+        bytes32 intentId,
+        address asset,
+        uint256 amount,
+        bytes calldata data,
+        bytes32 fulfillmentIndex,
+        bool isFulfilled
+    ) external;
 }

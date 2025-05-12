@@ -473,20 +473,13 @@ contract Intent is
         // Check if intent has already been settled
         require(!settlements[fulfillmentIndex].settled, "Intent already settled");
 
-        // If this is a call intent, verify the receiver implements IntentTarget
-        if (isCall) {
-            // The try/catch allows fulfillment to succeed even if the contract doesn't implement the interface correctly
-            // This is important because otherwise funds could get stuck
-            try IntentTarget(receiver).onFulfill(intentId, asset, amount, data) {
-                // Contract call succeeded
-            } catch {
-                // Contract call failed - we still want to continue with the token transfer
-                // to avoid the intent being blocked
-            }
-        }
-
         // Transfer tokens from the sender to the receiver
         IERC20(asset).safeTransferFrom(msg.sender, receiver, amount);
+
+        // If this is a call intent, call onFulfill - this will revert if it fails
+        if (isCall) {
+            IntentTarget(receiver).onFulfill(intentId, asset, amount, data);
+        }
 
         // Register the fulfillment
         fulfillments[fulfillmentIndex] = msg.sender;
@@ -548,25 +541,22 @@ contract Intent is
 
             IERC20(asset).safeTransfer(fulfiller, actualAmount + tip);
 
-            // If this is a call intent, try to call onSettle on the receiver
+            // If this is a call intent, call onSettle on the receiver
             if (isCall) {
-                try IntentTarget(receiver).onSettle(intentId, asset, amount, data, fulfillmentIndex) {
-                    // Contract call succeeded
-                } catch {
-                    // Contract call failed - we still want the settlement to succeed
-                }
+                // Call onSettle with isFulfilled = true
+                IntentTarget(receiver).onSettle(intentId, asset, amount, data, fulfillmentIndex, true);
             }
         } else {
             // Transfer tokens to the receiver
             IERC20(asset).safeTransfer(receiver, actualAmount + tip);
 
-            // If this is a call intent and not fulfilled yet, call onFulfill
+            // If this is a call intent, call onFulfill and onSettle
             if (isCall) {
-                try IntentTarget(receiver).onFulfill(intentId, asset, actualAmount, data) {
-                    // Contract call succeeded
-                } catch {
-                    // Contract call failed - we still want the settlement to succeed
-                }
+                // First call onFulfill
+                IntentTarget(receiver).onFulfill(intentId, asset, actualAmount, data);
+
+                // Then call onSettle with isFulfilled = false
+                IntentTarget(receiver).onSettle(intentId, asset, amount, data, fulfillmentIndex, false);
             }
         }
 

@@ -1601,7 +1601,7 @@ contract IntentTest is Test {
     }
 
     function test_FulfillCall_TargetReverts() public {
-        // First create an intent
+        // First create an intent with call
         uint256 amount = 100 ether;
         uint256 tip = 10 ether;
         uint256 targetChain = 1;
@@ -1629,20 +1629,18 @@ contract IntentTest is Test {
         vm.prank(user1);
         token.approve(address(intent), amount);
 
-        // Call fulfillCall - it should not revert even if the target contract reverts
+        // Call fulfillCall - expect it to revert with the target's revert message
         vm.prank(user1);
+        vm.expectRevert("MockIntentTarget: intentional revert in onFulfill");
         intent.fulfillCall(intentId, address(token), amount, address(mockTarget), data);
 
-        // Verify fulfillment was registered despite the revert
+        // Verify fulfillment was NOT registered since the transaction reverted
         bytes32 fulfillmentIndex =
             PayloadUtils.computeFulfillmentIndex(intentId, address(token), amount, address(mockTarget), true, data);
-        assertEq(intent.fulfillments(fulfillmentIndex), user1);
+        assertEq(intent.fulfillments(fulfillmentIndex), address(0), "Fulfillment should not be registered after revert");
 
-        // Verify tokens were still transferred to the target
-        assertEq(token.balanceOf(address(mockTarget)), amount);
-
-        // The onFulfill call should have failed, so the tracking variables shouldn't be set
-        assertFalse(mockTarget.onFulfillCalled(), "onFulfill should not have recorded a successful call");
+        // Verify tokens were NOT transferred to the target
+        assertEq(token.balanceOf(address(mockTarget)), 0, "Target should not receive tokens after revert");
     }
 
     function test_FulfillCall_NonContractReceiver() public {
@@ -1682,6 +1680,43 @@ contract IntentTest is Test {
 
         // Verify tokens were transferred to the mock target
         assertEq(token.balanceOf(address(mockTarget)), amount);
+    }
+
+    function test_FulfillCall_TokenAccessDuringOnFulfill() public {
+        // First create an intent
+        uint256 amount = 100 ether;
+        uint256 tip = 10 ether;
+        uint256 targetChain = 1;
+        bytes memory receiverBytes = abi.encodePacked(user2);
+        uint256 salt = 123;
+        bytes memory data = abi.encodeWithSignature("someFunction(uint256)", 42);
+
+        // We'll use MockIntentTarget for the fulfillment
+        MockIntentTarget mockTarget = new MockIntentTarget();
+
+        // Enable balance checking
+        mockTarget.setShouldCheckBalances(true);
+
+        // Mint tokens for initiate
+        token.mint(user1, amount + tip);
+        vm.prank(user1);
+        token.approve(address(intent), amount + tip);
+
+        // Initiate an intent with call
+        vm.prank(user1);
+        bytes32 intentId = intent.initiateCall(address(token), amount, targetChain, receiverBytes, tip, salt, data);
+
+        // Mint tokens to the fulfiller (user1) and approve them for the intent contract
+        token.mint(user1, amount);
+        vm.prank(user1);
+        token.approve(address(intent), amount);
+
+        // Call fulfillCall
+        vm.prank(user1);
+        intent.fulfillCall(intentId, address(token), amount, address(mockTarget), data);
+
+        // Verify that the token balance was correct during onFulfill call
+        assertEq(mockTarget.balanceDuringOnFulfill(), amount, "Token balance should be available during onFulfill");
     }
 
     function test_SettleCall() public {
@@ -1757,6 +1792,9 @@ contract IntentTest is Test {
         assertEq(mockTarget.lastAmount(), amount, "Amount should match");
         assertEq(keccak256(mockTarget.lastData()), keccak256(data), "Data should match");
         assertEq(mockTarget.lastFulfillmentIndex(), fulfillmentIndex, "Fulfillment index should match");
+
+        // Verify isFulfilled parameter was true
+        assertTrue(mockTarget.lastIsFulfilled(), "isFulfilled should be true");
     }
 
     function test_SettleCall_TargetReverts() public {
@@ -1789,6 +1827,9 @@ contract IntentTest is Test {
         vm.prank(user1);
         intent.fulfillCall(intentId, address(token), amount, address(mockTarget), data);
 
+        // Now store user's balance after fulfillment for later comparison
+        uint256 userBalanceBeforeSettlement = token.balanceOf(user1);
+
         // Prepare settlement payload (with isCall=true and data)
         bytes memory settlementPayload = PayloadUtils.encodeSettlementPayload(
             intentId,
@@ -1810,25 +1851,17 @@ contract IntentTest is Test {
         mockTarget.reset();
         mockTarget.setShouldRevert(true);
 
-        // Call onCall through gateway to settle the intent
-        // This should not revert even if the target contract reverts
+        // Get the gateway's token balance before the call
+        uint256 gatewayBalanceBefore = token.balanceOf(address(gateway));
+
+        // Call onCall through gateway to settle the intent - expect it to revert
         vm.prank(address(gateway));
+        vm.expectRevert("MockIntentTarget: intentional revert in onSettle");
         intent.onCall(IIntent.MessageContext({sender: router}), settlementPayload);
 
-        // Verify settlement record
-        bytes32 fulfillmentIndex =
-            PayloadUtils.computeFulfillmentIndex(intentId, address(token), amount, address(mockTarget), true, data);
-        (bool settled, bool fulfilled, uint256 paidTip, address fulfiller) = intent.settlements(fulfillmentIndex);
-        assertTrue(settled, "Settlement should be marked as settled");
-        assertTrue(fulfilled, "Settlement should be marked as fulfilled");
-        assertEq(paidTip, tip, "Paid tip should match the input tip");
-        assertEq(fulfiller, user1, "Fulfiller should be user1");
-
-        // Verify tokens were transferred to fulfiller (amount + tip)
-        assertEq(token.balanceOf(user1), amount + tip, "User1 should receive amount + tip");
-
-        // The onSettle call should have failed, so the tracking variables shouldn't be set
-        assertFalse(mockTarget.onSettleCalled(), "onSettle should not have recorded a successful call");
+        // The entire transaction should revert, so balances should remain unchanged
+        assertEq(token.balanceOf(user1), userBalanceBeforeSettlement, "User1 balance should be unchanged");
+        assertEq(token.balanceOf(address(gateway)), gatewayBalanceBefore, "Gateway balance should be unchanged");
     }
 
     function test_SettleCall_WithoutFulfillment() public {
@@ -1885,11 +1918,73 @@ contract IntentTest is Test {
         // Verify tokens were transferred to target (amount + tip)
         assertEq(token.balanceOf(address(mockTarget)), amount + tip, "Target should receive amount + tip");
 
-        // Verify onFulfill was called on the target (not onSettle)
+        // Verify onFulfill was called on the target
         assertTrue(mockTarget.onFulfillCalled(), "onFulfill should have been called");
+
+        // Verify onSettle was also called
+        assertTrue(mockTarget.onSettleCalled(), "onSettle should have been called");
+
+        // Verify the common parameters
         assertEq(mockTarget.lastIntentId(), intentId, "Intent ID should match");
         assertEq(mockTarget.lastAsset(), address(token), "Asset should match");
         assertEq(mockTarget.lastAmount(), amount, "Amount should match");
         assertEq(keccak256(mockTarget.lastData()), keccak256(data), "Data should match");
+
+        // Verify fulfillmentIndex was passed to onSettle
+        assertEq(mockTarget.lastFulfillmentIndex(), fulfillmentIndex, "Fulfillment index should match");
+
+        // Verify isFulfilled parameter was false
+        assertFalse(mockTarget.lastIsFulfilled(), "isFulfilled should be false");
+    }
+
+    function test_SettleCall_TokenAccessDuringOnFulfill() public {
+        // First create an intent with call
+        uint256 amount = 100 ether;
+        uint256 tip = 10 ether;
+        uint256 targetChain = 1;
+        bytes memory receiverBytes = abi.encodePacked(user2);
+        uint256 salt = 123;
+        bytes memory data = abi.encodeWithSignature("someFunction(uint256)", 42);
+
+        // Deploy a mock target contract that implements IntentTarget
+        MockIntentTarget mockTarget = new MockIntentTarget();
+
+        // Enable balance checking
+        mockTarget.setShouldCheckBalances(true);
+
+        // Mint tokens for initiate
+        token.mint(user1, amount + tip);
+        vm.prank(user1);
+        token.approve(address(intent), amount + tip);
+
+        // Initiate an intent with call
+        vm.prank(user1);
+        bytes32 intentId = intent.initiateCall(address(token), amount, targetChain, receiverBytes, tip, salt, data);
+
+        // Prepare settlement payload (with isCall=true and data) - Not fulfilling first
+        bytes memory settlementPayload = PayloadUtils.encodeSettlementPayload(
+            intentId,
+            amount,
+            address(token),
+            address(mockTarget),
+            tip,
+            amount, // actualAmount same as amount in the test case
+            true, // isCall
+            data // data for the call
+        );
+
+        // Transfer tokens to gateway for settlement
+        token.mint(address(gateway), amount + tip);
+        vm.prank(address(gateway));
+        token.approve(address(intent), amount + tip);
+
+        // Call onCall through gateway to settle the intent
+        vm.prank(address(gateway));
+        intent.onCall(IIntent.MessageContext({sender: router}), settlementPayload);
+
+        // Verify that the token balance was correct during onFulfill call
+        assertEq(
+            mockTarget.balanceDuringOnFulfill(), amount + tip, "Token balance should be available during onFulfill"
+        );
     }
 }
