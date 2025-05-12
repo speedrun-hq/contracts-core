@@ -596,7 +596,6 @@ contract Intent is
         external
         payable
         onlyGatewayOrRouter
-        nonReentrant
         returns (bytes memory)
     {
         // Verify sender is the router

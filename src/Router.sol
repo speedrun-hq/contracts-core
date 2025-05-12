@@ -237,7 +237,7 @@ contract Router is
         address zrc20,
         uint256 amountWithTip,
         bytes calldata payload
-    ) external override onlyGatewayOrIntent whenNotPaused nonReentrant {
+    ) external override onlyGatewayOrIntent whenNotPaused {
         // Decode intent payload
         PayloadUtils.IntentPayload memory intentPayload = PayloadUtils.decodeIntentPayload(payload);
 
