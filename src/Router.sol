@@ -337,8 +337,12 @@ contract Router is
             intentInfo.intentPayload.amount, intentInfo.amountWithTip, sourceDecimals, targetDecimals
         );
 
-        // Get the appropriate gas limit for the target chain
-        settlementInfo.gasLimit = _getChainGasLimit(intentInfo.intentPayload.targetChain);
+        // Get the appropriate gas limit for the target chain - use custom gas limit if provided, otherwise fallback to default
+        if (intentInfo.intentPayload.gasLimit > 0) {
+            settlementInfo.gasLimit = intentInfo.intentPayload.gasLimit;
+        } else {
+            settlementInfo.gasLimit = _getChainGasLimit(intentInfo.intentPayload.targetChain);
+        }
 
         // Initialize gas fee variables
         settlementInfo.gasZRC20 = address(0);

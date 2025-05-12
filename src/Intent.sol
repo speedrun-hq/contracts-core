@@ -244,7 +244,7 @@ contract Intent is
         uint256 tip,
         uint256 salt
     ) external whenNotPaused returns (bytes32) {
-        return _initiate(asset, amount, targetChain, receiver, tip, salt, false, "");
+        return _initiate(asset, amount, targetChain, receiver, tip, salt, false, "", 0);
     }
 
     /**
@@ -265,11 +265,36 @@ contract Intent is
         uint256 tip,
         uint256 salt
     ) external whenNotPaused returns (bytes32) {
-        return _initiate(asset, amount, targetChain, receiver, tip, salt, false, "");
+        return _initiate(asset, amount, targetChain, receiver, tip, salt, false, "", 0);
     }
 
     /**
      * @dev Initiates a new intent for cross-chain transfer with contract call
+     * @param asset The ERC20 token address
+     * @param amount Amount to receive on target chain
+     * @param targetChain Target chain ID
+     * @param receiver Receiver address in bytes format (must implement IntentTarget)
+     * @param tip Tip for the fulfiller
+     * @param salt Salt for intent ID generation
+     * @param data Custom data to be passed to the receiver contract
+     * @param gasLimit Optional gas limit for the target chain transaction
+     * @return intentId The generated intent ID
+     */
+    function initiateCall(
+        address asset,
+        uint256 amount,
+        uint256 targetChain,
+        bytes calldata receiver,
+        uint256 tip,
+        uint256 salt,
+        bytes calldata data,
+        uint256 gasLimit
+    ) external whenNotPaused returns (bytes32) {
+        return _initiate(asset, amount, targetChain, receiver, tip, salt, true, data, gasLimit);
+    }
+
+    /**
+     * @dev Initiates a new intent for cross-chain transfer with contract call (backward compatibility)
      * @param asset The ERC20 token address
      * @param amount Amount to receive on target chain
      * @param targetChain Target chain ID
@@ -288,7 +313,7 @@ contract Intent is
         uint256 salt,
         bytes calldata data
     ) external whenNotPaused returns (bytes32) {
-        return _initiate(asset, amount, targetChain, receiver, tip, salt, true, data);
+        return _initiate(asset, amount, targetChain, receiver, tip, salt, true, data, 0);
     }
 
     /**
@@ -302,7 +327,8 @@ contract Intent is
         uint256 tip,
         uint256 salt,
         bool isCall,
-        bytes memory data
+        bytes memory data,
+        uint256 gasLimit
     ) internal returns (bytes32) {
         // Cannot initiate a transfer to the current chain
         require(targetChain != block.chainid, "Target chain cannot be the current chain");
@@ -321,7 +347,7 @@ contract Intent is
 
         // Create payload for crosschain transaction
         bytes memory payload =
-            PayloadUtils.encodeIntentPayload(intentId, amount, tip, targetChain, receiver, isCall, data);
+            PayloadUtils.encodeIntentPayload(intentId, amount, tip, targetChain, receiver, isCall, data, gasLimit);
 
         if (isZetaChain) {
             // ZetaChain as source - direct call to router without going through gateway

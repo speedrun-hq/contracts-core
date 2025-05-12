@@ -14,6 +14,7 @@ library PayloadUtils {
         bytes receiver;
         bool isCall;
         bytes data;
+        uint256 gasLimit;
     }
 
     /**
@@ -26,9 +27,25 @@ library PayloadUtils {
         uint256 targetChain,
         bytes memory receiver,
         bool isCall,
+        bytes memory data,
+        uint256 gasLimit
+    ) internal pure returns (bytes memory) {
+        return abi.encode(intentId, amount, tip, targetChain, receiver, isCall, data, gasLimit);
+    }
+
+    /**
+     * @dev Encodes intent data into a payload for cross-chain transaction (without gasLimit, sets it to 0)
+     */
+    function encodeIntentPayload(
+        bytes32 intentId,
+        uint256 amount,
+        uint256 tip,
+        uint256 targetChain,
+        bytes memory receiver,
+        bool isCall,
         bytes memory data
     ) internal pure returns (bytes memory) {
-        return abi.encode(intentId, amount, tip, targetChain, receiver, isCall, data);
+        return encodeIntentPayload(intentId, amount, tip, targetChain, receiver, isCall, data, 0);
     }
 
     /**
@@ -41,7 +58,7 @@ library PayloadUtils {
         uint256 targetChain,
         bytes memory receiver
     ) internal pure returns (bytes memory) {
-        return encodeIntentPayload(intentId, amount, tip, targetChain, receiver, false, "");
+        return encodeIntentPayload(intentId, amount, tip, targetChain, receiver, false, "", 0);
     }
 
     /**
@@ -55,8 +72,9 @@ library PayloadUtils {
             uint256 targetChain,
             bytes memory receiver,
             bool isCall,
-            bytes memory data
-        ) = abi.decode(payload, (bytes32, uint256, uint256, uint256, bytes, bool, bytes));
+            bytes memory data,
+            uint256 gasLimit
+        ) = abi.decode(payload, (bytes32, uint256, uint256, uint256, bytes, bool, bytes, uint256));
 
         return IntentPayload({
             intentId: intentId,
@@ -65,7 +83,8 @@ library PayloadUtils {
             targetChain: targetChain,
             receiver: receiver,
             isCall: isCall,
-            data: data
+            data: data,
+            gasLimit: gasLimit
         });
     }
 
