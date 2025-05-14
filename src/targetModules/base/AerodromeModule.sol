@@ -4,6 +4,7 @@ pragma solidity 0.8.26;
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "../../interfaces/IntentTarget.sol";
+import "./AerodromeSwapLib.sol";
 
 /**
  * @title Aerodrome Router interface
@@ -115,7 +116,7 @@ contract AerodromeModule is IntentTarget, Ownable {
     function onFulfill(bytes32, address asset, uint256 amount, bytes calldata data) external override onlyIntent {
         // Decode the swap parameters from the data field
         (address[] memory path, bool[] memory stableFlags, uint256 minAmountOut, uint256 deadline, address receiver) =
-            decodeSwapParams(data);
+            AerodromeSwapLib.decodeSwapParams(data);
 
         // Ensure the first token in the path matches the received asset
         require(path[0] == asset, "Asset mismatch");
@@ -154,49 +155,6 @@ contract AerodromeModule is IntentTarget, Ownable {
         // Optional: Add custom settlement logic here
         // This function is called when an intent is settled
         // For example, we could send a reward to the fulfiller
-    }
-
-    /**
-     * @dev Helper function to decode swap parameters from the bytes data
-     * @param data The encoded swap parameters
-     * @return path Array of token addresses for the swap path
-     * @return stableFlags Array of booleans indicating if pools are stable or volatile
-     * @return minAmountOut Minimum output amount
-     * @return deadline Transaction deadline
-     * @return receiver Address that will receive the swapped tokens
-     */
-    function decodeSwapParams(bytes memory data)
-        internal
-        pure
-        returns (
-            address[] memory path,
-            bool[] memory stableFlags,
-            uint256 minAmountOut,
-            uint256 deadline,
-            address receiver
-        )
-    {
-        // Decode the packed data
-        return abi.decode(data, (address[], bool[], uint256, uint256, address));
-    }
-
-    /**
-     * @dev Helper function to encode swap parameters
-     * @param path Array of token addresses for the swap path
-     * @param stableFlags Array of booleans indicating if pools are stable or volatile
-     * @param minAmountOut Minimum output amount
-     * @param deadline Transaction deadline
-     * @param receiver Address that will receive the swapped tokens
-     * @return The encoded parameters as bytes
-     */
-    function encodeSwapParams(
-        address[] memory path,
-        bool[] memory stableFlags,
-        uint256 minAmountOut,
-        uint256 deadline,
-        address receiver
-    ) public pure returns (bytes memory) {
-        return abi.encode(path, stableFlags, minAmountOut, deadline, receiver);
     }
 
     /**
