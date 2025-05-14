@@ -13,26 +13,32 @@ contract MockIntent is IIntent {
     address private _lastCaller;
     bytes private _lastMessage;
 
-    function initiate(address, uint256, uint256, bytes calldata, uint256, uint256) external returns (bytes32) {
-        return bytes32(0);
+    function initiate(address, uint256, uint256, bytes calldata, uint256, uint256) external virtual returns (bytes32) {
+        return bytes32(uint256(1));
     }
 
-    function initiateTransfer(address, uint256, uint256, bytes calldata, uint256, uint256) external returns (bytes32) {
-        return bytes32(0);
+    function initiateTransfer(address, uint256, uint256, bytes calldata, uint256, uint256)
+        external
+        virtual
+        returns (bytes32)
+    {
+        return bytes32(uint256(1));
     }
 
     function initiateCall(address, uint256, uint256, bytes calldata, uint256, uint256, bytes calldata)
         external
+        virtual
         returns (bytes32)
     {
-        return bytes32(0);
+        return bytes32(uint256(1));
     }
 
     function initiateCall(address, uint256, uint256, bytes calldata, uint256, uint256, bytes calldata, uint256)
         external
+        virtual
         returns (bytes32)
     {
-        return bytes32(0);
+        return bytes32(uint256(1));
     }
 
     function fulfill(bytes32, address, uint256, address) external {
