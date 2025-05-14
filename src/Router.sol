@@ -58,7 +58,7 @@ contract Router is
     bytes32 public constant PAUSER_ROLE = keccak256("PAUSER_ROLE");
 
     // Default gas limit for withdraw operations
-    uint256 private constant DEFAULT_WITHDRAW_GAS_LIMIT = 300000;
+    uint256 private constant DEFAULT_WITHDRAW_GAS_LIMIT = 400000;
 
     // Current gas limit for withdraw operations (can be modified by admin)
     uint256 public withdrawGasLimit;
@@ -237,7 +237,7 @@ contract Router is
         address zrc20,
         uint256 amountWithTip,
         bytes calldata payload
-    ) external override onlyGatewayOrIntent whenNotPaused nonReentrant {
+    ) external override onlyGatewayOrIntent whenNotPaused {
         // Decode intent payload
         PayloadUtils.IntentPayload memory intentPayload = PayloadUtils.decodeIntentPayload(payload);
 
@@ -266,9 +266,12 @@ contract Router is
             settlementInfo.targetAsset,
             receiverAddress,
             settlementInfo.tipAfterSwap,
-            settlementInfo.actualAmount // actual amount to transfer after all costs
+            settlementInfo.actualAmount, // actual amount to transfer after all costs
+            intentPayload.isCall, // pass isCall from intent payload
+            intentPayload.data // pass data from intent payload
         );
 
+        // Check if target chain is the current chain (ZetaChain)
         if (isZetaChainDestination) {
             // Process settlement directly on ZetaChain
             _processChainsSettlementOnZetaChain(
@@ -334,8 +337,12 @@ contract Router is
             intentInfo.intentPayload.amount, intentInfo.amountWithTip, sourceDecimals, targetDecimals
         );
 
-        // Get the appropriate gas limit for the target chain
-        settlementInfo.gasLimit = _getChainGasLimit(intentInfo.intentPayload.targetChain);
+        // Get the appropriate gas limit for the target chain - use custom gas limit if provided, otherwise fallback to default
+        if (intentInfo.intentPayload.gasLimit > 0) {
+            settlementInfo.gasLimit = intentInfo.intentPayload.gasLimit;
+        } else {
+            settlementInfo.gasLimit = _getChainGasLimit(intentInfo.intentPayload.targetChain);
+        }
 
         // Initialize gas fee variables
         settlementInfo.gasZRC20 = address(0);

@@ -12,6 +12,9 @@ library PayloadUtils {
         uint256 tip;
         uint256 targetChain;
         bytes receiver;
+        bool isCall;
+        bytes data;
+        uint256 gasLimit;
     }
 
     /**
@@ -22,20 +25,67 @@ library PayloadUtils {
         uint256 amount,
         uint256 tip,
         uint256 targetChain,
+        bytes memory receiver,
+        bool isCall,
+        bytes memory data,
+        uint256 gasLimit
+    ) internal pure returns (bytes memory) {
+        return abi.encode(intentId, amount, tip, targetChain, receiver, isCall, data, gasLimit);
+    }
+
+    /**
+     * @dev Encodes intent data into a payload for cross-chain transaction (without gasLimit, sets it to 0)
+     */
+    function encodeIntentPayload(
+        bytes32 intentId,
+        uint256 amount,
+        uint256 tip,
+        uint256 targetChain,
+        bytes memory receiver,
+        bool isCall,
+        bytes memory data
+    ) internal pure returns (bytes memory) {
+        return encodeIntentPayload(intentId, amount, tip, targetChain, receiver, isCall, data, 0);
+    }
+
+    /**
+     * @dev Encodes standard intent data into a payload (backward compatibility)
+     */
+    function encodeIntentPayload(
+        bytes32 intentId,
+        uint256 amount,
+        uint256 tip,
+        uint256 targetChain,
         bytes memory receiver
     ) internal pure returns (bytes memory) {
-        return abi.encode(intentId, amount, tip, targetChain, receiver);
+        return encodeIntentPayload(intentId, amount, tip, targetChain, receiver, false, "", 0);
     }
 
     /**
      * @dev Decodes payload back into intent data
      */
     function decodeIntentPayload(bytes memory payload) internal pure returns (IntentPayload memory) {
-        (bytes32 intentId, uint256 amount, uint256 tip, uint256 targetChain, bytes memory receiver) =
-            abi.decode(payload, (bytes32, uint256, uint256, uint256, bytes));
+        (
+            bytes32 intentId,
+            uint256 amount,
+            uint256 tip,
+            uint256 targetChain,
+            bytes memory receiver,
+            bool isCall,
+            bytes memory data,
+            uint256 gasLimit
+        ) = abi.decode(payload, (bytes32, uint256, uint256, uint256, bytes, bool, bytes, uint256));
 
-        return
-            IntentPayload({intentId: intentId, amount: amount, tip: tip, targetChain: targetChain, receiver: receiver});
+        return IntentPayload({
+            intentId: intentId,
+            amount: amount,
+            tip: tip,
+            targetChain: targetChain,
+            receiver: receiver,
+            isCall: isCall,
+            data: data,
+            gasLimit: gasLimit
+        });
     }
 
     /**
@@ -57,6 +107,10 @@ library PayloadUtils {
         // The actual amount to be transferred after deducting any fees, slippage, or gas costs
         // This may be lower than the original 'amount' if the tip wasn't sufficient to cover all costs
         uint256 actualAmount;
+        // Whether this is a callable intent
+        bool isCall;
+        // Custom data to be used in contract calls
+        bytes data;
     }
 
     /**
@@ -68,17 +122,41 @@ library PayloadUtils {
         address asset,
         address receiver,
         uint256 tip,
+        uint256 actualAmount,
+        bool isCall,
+        bytes memory data
+    ) internal pure returns (bytes memory) {
+        return abi.encode(intentId, amount, asset, receiver, tip, actualAmount, isCall, data);
+    }
+
+    /**
+     * @dev Encodes standard settlement data into a payload (backward compatibility)
+     */
+    function encodeSettlementPayload(
+        bytes32 intentId,
+        uint256 amount,
+        address asset,
+        address receiver,
+        uint256 tip,
         uint256 actualAmount
     ) internal pure returns (bytes memory) {
-        return abi.encode(intentId, amount, asset, receiver, tip, actualAmount);
+        return encodeSettlementPayload(intentId, amount, asset, receiver, tip, actualAmount, false, "");
     }
 
     /**
      * @dev Decodes settlement payload back into data
      */
     function decodeSettlementPayload(bytes memory payload) internal pure returns (SettlementPayload memory) {
-        (bytes32 intentId, uint256 amount, address asset, address receiver, uint256 tip, uint256 actualAmount) =
-            abi.decode(payload, (bytes32, uint256, address, address, uint256, uint256));
+        (
+            bytes32 intentId,
+            uint256 amount,
+            address asset,
+            address receiver,
+            uint256 tip,
+            uint256 actualAmount,
+            bool isCall,
+            bytes memory data
+        ) = abi.decode(payload, (bytes32, uint256, address, address, uint256, uint256, bool, bytes));
 
         return SettlementPayload({
             intentId: intentId,
@@ -86,12 +164,35 @@ library PayloadUtils {
             asset: asset,
             receiver: receiver,
             tip: tip,
-            actualAmount: actualAmount
+            actualAmount: actualAmount,
+            isCall: isCall,
+            data: data
         });
     }
 
     /**
      * @dev Computes a unique index for a fulfillment
+     * @param intentId The ID of the intent
+     * @param asset The ERC20 token address
+     * @param amount Amount to transfer
+     * @param receiver Receiver address
+     * @param isCall Whether this is a callable intent
+     * @param data Custom data for contract calls
+     * @return The computed fulfillment index
+     */
+    function computeFulfillmentIndex(
+        bytes32 intentId,
+        address asset,
+        uint256 amount,
+        address receiver,
+        bool isCall,
+        bytes memory data
+    ) internal pure returns (bytes32) {
+        return keccak256(abi.encodePacked(intentId, asset, amount, receiver, isCall, data));
+    }
+
+    /**
+     * @dev Computes a unique index for a fulfillment (backward compatibility)
      * @param intentId The ID of the intent
      * @param asset The ERC20 token address
      * @param amount Amount to transfer
@@ -103,7 +204,7 @@ library PayloadUtils {
         pure
         returns (bytes32)
     {
-        return keccak256(abi.encodePacked(intentId, asset, amount, receiver));
+        return computeFulfillmentIndex(intentId, asset, amount, receiver, false, "");
     }
 
     /**

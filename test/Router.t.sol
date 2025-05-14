@@ -391,7 +391,7 @@ contract RouterTest is Test {
         bytes memory receiver = abi.encodePacked(user2);
 
         bytes memory intentPayloadBytes =
-            PayloadUtils.encodeIntentPayload(intentId, amount, tip, targetChainId, receiver);
+            PayloadUtils.encodeIntentPayload(intentId, amount, tip, targetChainId, receiver, false, "", 0);
 
         // Set modest slippage (5%)
         swapModule.setSlippage(500);
@@ -461,7 +461,10 @@ contract RouterTest is Test {
             intentAmount, // Use the smaller amount in the payload
             tip,
             targetChainId,
-            receiver
+            receiver,
+            false,
+            "",
+            0
         );
 
         // Set modest slippage (10%) - with enough input to create the desired scenario
@@ -540,7 +543,7 @@ contract RouterTest is Test {
         bytes memory receiver = abi.encodePacked(user2);
 
         bytes memory intentPayloadBytes =
-            PayloadUtils.encodeIntentPayload(intentId, amount, tip, targetChainId, receiver);
+            PayloadUtils.encodeIntentPayload(intentId, amount, tip, targetChainId, receiver, false, "", 0);
 
         // Set high slippage (8%) so we can observe amount reduction
         swapModule.setSlippage(800); // 8% slippage = 8 ether on 100 ether
@@ -630,7 +633,7 @@ contract RouterTest is Test {
         bytes memory receiver = abi.encodePacked(user2);
 
         bytes memory intentPayloadBytes =
-            PayloadUtils.encodeIntentPayload(intentId, amount, tip, targetChainId, receiver);
+            PayloadUtils.encodeIntentPayload(intentId, amount, tip, targetChainId, receiver, false, "", 0);
 
         // Mock decimals for input token (6 decimals like USDC)
         vm.mockCall(address(inputToken), abi.encodeWithSelector(IZRC20.decimals.selector), abi.encode(uint8(6)));
@@ -897,7 +900,7 @@ contract RouterTest is Test {
         uint256 tip = 10 ether;
         bytes memory receiver = abi.encodePacked(user2);
         bytes memory intentPayloadBytes =
-            PayloadUtils.encodeIntentPayload(intentId, amount, tip, targetChainId, receiver);
+            PayloadUtils.encodeIntentPayload(intentId, amount, tip, targetChainId, receiver, false, "", 0);
 
         // Mock setup for withdrawGasFeeWithGasLimit
         uint256 gasFee = 1 ether;
@@ -990,7 +993,8 @@ contract RouterTest is Test {
         uint256 tip = 10 ether;
         bytes memory receiver = abi.encodePacked(user2);
 
-        bytes memory intentPayloadBytes = PayloadUtils.encodeIntentPayload(intentId, amount, tip, zetaChainId, receiver);
+        bytes memory intentPayloadBytes =
+            PayloadUtils.encodeIntentPayload(intentId, amount, tip, zetaChainId, receiver, false, "", 0);
 
         // Set modest slippage (5%)
         swapModule.setSlippage(500);
@@ -1184,7 +1188,7 @@ contract RouterTest is Test {
         bytes memory receiver = abi.encodePacked(user2);
 
         bytes memory intentPayloadBytes =
-            PayloadUtils.encodeIntentPayload(intentId, amount, tip, targetChainId, receiver);
+            PayloadUtils.encodeIntentPayload(intentId, amount, tip, targetChainId, receiver, false, "", 0);
 
         // Set modest slippage (5%)
         swapModule.setSlippage(500);
@@ -1243,7 +1247,7 @@ contract RouterTest is Test {
         bytes memory receiver = abi.encodePacked(user2);
 
         bytes memory intentPayloadBytes =
-            PayloadUtils.encodeIntentPayload(intentId, amount, tip, targetChainId, receiver);
+            PayloadUtils.encodeIntentPayload(intentId, amount, tip, targetChainId, receiver, false, "", 0);
 
         // Mock setup for IZRC20 withdrawGasFeeWithGasLimit
         uint256 gasFee = 1 ether;
@@ -1338,7 +1342,7 @@ contract RouterTest is Test {
         bytes memory receiver = abi.encodePacked(user2);
 
         bytes memory intentPayloadBytes =
-            PayloadUtils.encodeIntentPayload(intentId, amount, tip, targetChainId, receiver);
+            PayloadUtils.encodeIntentPayload(intentId, amount, tip, targetChainId, receiver, false, "", 0);
 
         // Set modest slippage (5%)
         swapModule.setSlippage(500);
@@ -1372,5 +1376,64 @@ contract RouterTest is Test {
         vm.prank(address(gateway));
         vm.expectRevert("Swap returned invalid amount");
         router.onCall(context, address(inputToken), amount + tip, intentPayloadBytes);
+    }
+
+    function test_OnCall_UsesCustomGasLimitFromPayload() public {
+        // Setup intent contract
+        uint256 sourceChainId = 1;
+        uint256 targetChainId = 42161; // Arbitrum chain ID
+        address sourceIntentContract = makeAddr("sourceIntentContract");
+        address targetIntentContract = makeAddr("targetIntentContract");
+        router.setIntentContract(sourceChainId, sourceIntentContract);
+        router.setIntentContract(targetChainId, targetIntentContract);
+
+        // Setup token associations
+        string memory tokenName = "USDC";
+        router.addToken(tokenName);
+        address inputAsset = makeAddr("input_asset");
+        address targetAsset = makeAddr("target_asset");
+        router.addTokenAssociation(tokenName, sourceChainId, inputAsset, address(inputToken));
+        router.addTokenAssociation(tokenName, targetChainId, targetAsset, address(targetZRC20));
+
+        // Set a custom gas limit for the target chain
+        uint256 chainSpecificGasLimit = 500000;
+        router.setChainWithdrawGasLimit(targetChainId, chainSpecificGasLimit);
+
+        // Setup intent payload with custom gas limit that's different from chain config
+        bytes32 intentId = keccak256("test-intent-custom-gas");
+        uint256 amount = 100 ether;
+        uint256 tip = 10 ether;
+        bytes memory receiver = abi.encodePacked(user2);
+        uint256 customGasLimit = 700000; // Custom gas limit different from chain config
+
+        bytes memory intentPayloadBytes =
+            PayloadUtils.encodeIntentPayload(intentId, amount, tip, targetChainId, receiver, false, "", customGasLimit);
+
+        // Mock withdrawGasFeeWithGasLimit to verify it's called with the custom gas limit from payload
+        uint256 gasFee = 1 ether;
+        vm.mockCall(
+            address(targetZRC20),
+            abi.encodeWithSelector(IZRC20.withdrawGasFeeWithGasLimit.selector, customGasLimit),
+            abi.encode(address(gasZRC20), gasFee)
+        );
+
+        // Mint tokens to make the test work
+        inputToken.mint(address(router), amount + tip);
+        targetZRC20.mint(address(swapModule), amount + tip);
+        gasZRC20.mint(address(swapModule), gasFee);
+
+        // Setup context
+        IGateway.ZetaChainMessageContext memory context = IGateway.ZetaChainMessageContext({
+            chainID: sourceChainId,
+            sender: abi.encodePacked(sourceIntentContract),
+            senderEVM: sourceIntentContract
+        });
+
+        // Call onCall
+        vm.prank(address(gateway));
+        router.onCall(context, address(inputToken), amount + tip, intentPayloadBytes);
+
+        // The test passes if the mock call with the custom gas limit is used
+        // If the chain-specific gas limit was used instead, the mock would not match and the test would fail
     }
 }

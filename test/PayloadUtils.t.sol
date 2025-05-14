@@ -15,9 +15,13 @@ contract PayloadUtilsTest is Test {
         uint256 targetChain = 42;
         address receiver = makeAddr("receiver");
         bytes memory receiverBytes = abi.encodePacked(receiver);
+        bool isCall = false;
+        bytes memory data = "";
+        uint256 gasLimit = 300000;
 
         // Encode intent payload
-        bytes memory encoded = PayloadUtils.encodeIntentPayload(intentId, amount, tip, targetChain, receiverBytes);
+        bytes memory encoded =
+            PayloadUtils.encodeIntentPayload(intentId, amount, tip, targetChain, receiverBytes, isCall, data, gasLimit);
 
         // Decode intent payload
         PayloadUtils.IntentPayload memory decoded = PayloadUtils.decodeIntentPayload(encoded);
@@ -28,6 +32,9 @@ contract PayloadUtilsTest is Test {
         assertEq(decoded.tip, tip, "Tip mismatch");
         assertEq(decoded.targetChain, targetChain, "Target chain mismatch");
         assertEq(keccak256(decoded.receiver), keccak256(receiverBytes), "Receiver bytes mismatch");
+        assertEq(decoded.isCall, isCall, "isCall mismatch");
+        assertEq(keccak256(decoded.data), keccak256(data), "Data mismatch");
+        assertEq(decoded.gasLimit, gasLimit, "Gas limit mismatch");
     }
 
     function test_EncodeDecodeIntentPayload_ZeroValues() public pure {
@@ -37,9 +44,13 @@ contract PayloadUtilsTest is Test {
         uint256 tip = 0;
         uint256 targetChain = 0;
         bytes memory receiverBytes = new bytes(20); // all zeros address
+        bool isCall = false;
+        bytes memory data = "";
+        uint256 gasLimit = 0;
 
         // Encode intent payload
-        bytes memory encoded = PayloadUtils.encodeIntentPayload(intentId, amount, tip, targetChain, receiverBytes);
+        bytes memory encoded =
+            PayloadUtils.encodeIntentPayload(intentId, amount, tip, targetChain, receiverBytes, isCall, data, gasLimit);
 
         // Decode intent payload
         PayloadUtils.IntentPayload memory decoded = PayloadUtils.decodeIntentPayload(encoded);
@@ -50,6 +61,9 @@ contract PayloadUtilsTest is Test {
         assertEq(decoded.tip, tip, "Tip mismatch");
         assertEq(decoded.targetChain, targetChain, "Target chain mismatch");
         assertEq(keccak256(decoded.receiver), keccak256(receiverBytes), "Receiver bytes mismatch");
+        assertEq(decoded.isCall, isCall, "isCall mismatch");
+        assertEq(keccak256(decoded.data), keccak256(data), "Data mismatch");
+        assertEq(decoded.gasLimit, gasLimit, "Gas limit mismatch");
     }
 
     function test_EncodeDecodeIntentPayload_LargeValues() public {
@@ -60,9 +74,13 @@ contract PayloadUtilsTest is Test {
         uint256 targetChain = type(uint256).max - 2;
         address receiver = makeAddr("receiver");
         bytes memory receiverBytes = abi.encodePacked(receiver);
+        bool isCall = true;
+        bytes memory data = abi.encodePacked("some-long-data-for-the-call", uint256(123456789));
+        uint256 gasLimit = type(uint256).max - 3;
 
         // Encode intent payload
-        bytes memory encoded = PayloadUtils.encodeIntentPayload(intentId, amount, tip, targetChain, receiverBytes);
+        bytes memory encoded =
+            PayloadUtils.encodeIntentPayload(intentId, amount, tip, targetChain, receiverBytes, isCall, data, gasLimit);
 
         // Decode intent payload
         PayloadUtils.IntentPayload memory decoded = PayloadUtils.decodeIntentPayload(encoded);
@@ -73,6 +91,39 @@ contract PayloadUtilsTest is Test {
         assertEq(decoded.tip, tip, "Tip mismatch");
         assertEq(decoded.targetChain, targetChain, "Target chain mismatch");
         assertEq(keccak256(decoded.receiver), keccak256(receiverBytes), "Receiver bytes mismatch");
+        assertEq(decoded.isCall, isCall, "isCall mismatch");
+        assertEq(keccak256(decoded.data), keccak256(data), "Data mismatch");
+        assertEq(decoded.gasLimit, gasLimit, "Gas limit mismatch");
+    }
+
+    function test_EncodeDecodeIntentPayload_CustomGasLimit() public {
+        // Create test data with custom gas limit
+        bytes32 intentId = keccak256("test-intent");
+        uint256 amount = 1000 ether;
+        uint256 tip = 50 ether;
+        uint256 targetChain = 42;
+        address receiver = makeAddr("receiver");
+        bytes memory receiverBytes = abi.encodePacked(receiver);
+        bool isCall = true;
+        bytes memory data = "0x123456";
+        uint256 gasLimit = 500000; // Custom gas limit
+
+        // Encode intent payload
+        bytes memory encoded =
+            PayloadUtils.encodeIntentPayload(intentId, amount, tip, targetChain, receiverBytes, isCall, data, gasLimit);
+
+        // Decode intent payload
+        PayloadUtils.IntentPayload memory decoded = PayloadUtils.decodeIntentPayload(encoded);
+
+        // Assert all fields match, especially the gas limit
+        assertEq(decoded.intentId, intentId, "Intent ID mismatch");
+        assertEq(decoded.amount, amount, "Amount mismatch");
+        assertEq(decoded.tip, tip, "Tip mismatch");
+        assertEq(decoded.targetChain, targetChain, "Target chain mismatch");
+        assertEq(keccak256(decoded.receiver), keccak256(receiverBytes), "Receiver bytes mismatch");
+        assertEq(decoded.isCall, isCall, "isCall mismatch");
+        assertEq(keccak256(decoded.data), keccak256(data), "Data mismatch");
+        assertEq(decoded.gasLimit, gasLimit, "Gas limit mismatch");
     }
 
     function test_EncodeDecodeSettlementPayload() public {
@@ -199,10 +250,12 @@ contract PayloadUtilsTest is Test {
         address asset = makeAddr("asset");
         uint256 amount = 1000 ether;
         address receiver = makeAddr("receiver");
+        bool isCall = false;
+        bytes memory data = "";
 
-        bytes32 index = PayloadUtils.computeFulfillmentIndex(intentId, asset, amount, receiver);
+        bytes32 index = PayloadUtils.computeFulfillmentIndex(intentId, asset, amount, receiver, isCall, data);
 
-        bytes32 expected = keccak256(abi.encodePacked(intentId, asset, amount, receiver));
+        bytes32 expected = keccak256(abi.encodePacked(intentId, asset, amount, receiver, isCall, data));
 
         assertEq(index, expected, "Fulfillment index computation failed");
     }
@@ -214,23 +267,36 @@ contract PayloadUtilsTest is Test {
         address asset = makeAddr("asset");
         uint256 amount = 1000 ether;
         address receiver = makeAddr("receiver");
+        bool isCall = false;
+        bytes memory data = "";
 
-        bytes32 index1 = PayloadUtils.computeFulfillmentIndex(intentId1, asset, amount, receiver);
+        bytes32 index1 = PayloadUtils.computeFulfillmentIndex(intentId1, asset, amount, receiver, isCall, data);
 
-        bytes32 index2 = PayloadUtils.computeFulfillmentIndex(intentId2, asset, amount, receiver);
+        bytes32 index2 = PayloadUtils.computeFulfillmentIndex(intentId2, asset, amount, receiver, isCall, data);
 
         assertFalse(index1 == index2, "Indices should be different for different intent IDs");
 
-        bytes32 index3 = PayloadUtils.computeFulfillmentIndex(intentId1, makeAddr("different-asset"), amount, receiver);
+        bytes32 index3 =
+            PayloadUtils.computeFulfillmentIndex(intentId1, makeAddr("different-asset"), amount, receiver, isCall, data);
 
         assertFalse(index1 == index3, "Indices should be different for different assets");
 
-        bytes32 index4 = PayloadUtils.computeFulfillmentIndex(intentId1, asset, amount + 1, receiver);
+        bytes32 index4 = PayloadUtils.computeFulfillmentIndex(intentId1, asset, amount + 1, receiver, isCall, data);
 
         assertFalse(index1 == index4, "Indices should be different for different amounts");
 
-        bytes32 index5 = PayloadUtils.computeFulfillmentIndex(intentId1, asset, amount, makeAddr("different-receiver"));
+        bytes32 index5 =
+            PayloadUtils.computeFulfillmentIndex(intentId1, asset, amount, makeAddr("different-receiver"), isCall, data);
 
         assertFalse(index1 == index5, "Indices should be different for different receivers");
+
+        // Also test with different isCall and data values
+        bytes32 index6 = PayloadUtils.computeFulfillmentIndex(intentId1, asset, amount, receiver, true, data);
+
+        assertFalse(index1 == index6, "Indices should be different for different isCall values");
+
+        bytes32 index7 = PayloadUtils.computeFulfillmentIndex(intentId1, asset, amount, receiver, isCall, "some data");
+
+        assertFalse(index1 == index7, "Indices should be different for different data values");
     }
 }
