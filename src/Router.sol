@@ -58,7 +58,7 @@ contract Router is
     bytes32 public constant PAUSER_ROLE = keccak256("PAUSER_ROLE");
 
     // Default gas limit for withdraw operations
-    uint256 private constant DEFAULT_WITHDRAW_GAS_LIMIT = 300000;
+    uint256 private constant DEFAULT_WITHDRAW_GAS_LIMIT = 400000;
 
     // Current gas limit for withdraw operations (can be modified by admin)
     uint256 public withdrawGasLimit;
