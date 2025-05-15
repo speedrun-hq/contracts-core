@@ -20,7 +20,7 @@ contract TryIntentSwapScript is Script {
     uint256 constant AMOUNT_IN = 100000;
     uint256 constant TIP = 200000;
     uint256 constant SALT = 123456;
-    uint256 constant GAS_LIMIT = 400000;
+    uint256 constant GAS_LIMIT = 600000;
     uint256 constant MIN_AMOUNT_OUT = 0;
     uint256 constant DEADLINE = type(uint256).max;
     address constant RECEIVER = 0xD8ba46B6fc4b29d645eE44403060e91F38fbF9C1;
