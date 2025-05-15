@@ -102,7 +102,6 @@ contract AerodromeInitiator is Ownable {
     ) external returns (bytes32) {
         require(path.length >= 2, "Invalid path");
         require(path.length - 1 == stableFlags.length, "Path and flags length mismatch");
-        require(path[0] == asset, "First token in path must match asset");
 
         // Encode the swap parameters
         bytes memory data = AerodromeSwapLib.encodeSwapParams(path, stableFlags, minAmountOut, deadline, receiver);

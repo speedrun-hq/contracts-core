@@ -5,10 +5,10 @@ import {Script, console2} from "forge-std/Script.sol";
 import {AerodromeModule} from "../../../src/targetModules/base/AerodromeModule.sol";
 
 /**
- * @title DeployAerodromeModuleScript
+ * @title AerodromeModuleScript
  * @dev Deployment script for the Aerodrome module contract on Base chain
  */
-contract DeployAerodromeModuleScript is Script {
+contract AerodromeModuleScript is Script {
     function setUp() public {}
 
     function run() public {
