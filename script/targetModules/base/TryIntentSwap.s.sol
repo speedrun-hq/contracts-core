@@ -9,7 +9,7 @@ import {IIntent} from "../../../src/interfaces/IIntent.sol";
 
 contract TryIntentSwapScript is Script {
     // Contract addresses
-    address constant AERODROME_INITIATOR = 0xD954f11FC1a90B26D586746E831652Eb30b227BE;
+    address constant AERODROME_INITIATOR = 0xbAFeFC473e886557A7Bc8a283EdF4Cf47a3E17f9;
 
     // Token addresses
     address constant USDC_BASE = 0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913;
