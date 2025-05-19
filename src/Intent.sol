@@ -544,7 +544,7 @@ contract Intent is
             // If this is a call intent, call onSettle on the receiver
             if (isCall) {
                 // Call onSettle with isFulfilled = true
-                IntentTarget(receiver).onSettle(intentId, asset, amount, data, fulfillmentIndex, true);
+                IntentTarget(receiver).onSettle(intentId, asset, amount, data, fulfillmentIndex, true, tip);
             }
         } else {
             // Transfer tokens to the receiver
@@ -556,7 +556,7 @@ contract Intent is
                 IntentTarget(receiver).onFulfill(intentId, asset, actualAmount, data);
 
                 // Then call onSettle with isFulfilled = false
-                IntentTarget(receiver).onSettle(intentId, asset, amount, data, fulfillmentIndex, false);
+                IntentTarget(receiver).onSettle(intentId, asset, amount, data, fulfillmentIndex, false, tip);
             }
         }
 

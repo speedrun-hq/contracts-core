@@ -2,6 +2,7 @@
 pragma solidity 0.8.26;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "../../interfaces/IntentTarget.sol";
 import "./AerodromeSwapLib.sol";
@@ -36,6 +37,8 @@ interface IAerodromeRouter {
  * @dev Implementation of IntentTarget that performs token swaps on Aerodrome DEX on Base
  */
 contract AerodromeModule is IntentTarget, Ownable {
+    using SafeERC20 for IERC20;
+
     // Aerodrome Router address
     address public aerodromeRouter;
 
@@ -143,6 +146,7 @@ contract AerodromeModule is IntentTarget, Ownable {
      * @param data Custom data for execution
      * @param fulfillmentIndex The fulfillment index for this intent
      * @param isFulfilled Whether the intent was fulfilled before settlement
+     * @param tipAmount Tip amount for this intent, can be used to redistribute if not fulfilled
      */
     function onSettle(
         bytes32 intentId,
@@ -150,11 +154,16 @@ contract AerodromeModule is IntentTarget, Ownable {
         uint256 amount,
         bytes calldata data,
         bytes32 fulfillmentIndex,
-        bool isFulfilled
+        bool isFulfilled,
+        uint256 tipAmount
     ) external override onlyIntent {
-        // Optional: Add custom settlement logic here
-        // This function is called when an intent is settled
-        // For example, we could send a reward to the fulfiller
+        // If the intent was not fulfilled, we give back the tip to the swap receiver here
+        if (!isFulfilled) {
+            (address[] memory path, bool[] memory stableFlags, uint256 minAmountOut, uint256 deadline, address receiver)
+            = AerodromeSwapLib.decodeSwapParams(data);
+
+            IERC20(asset).safeTransfer(receiver, tipAmount);
+        }
     }
 
     /**

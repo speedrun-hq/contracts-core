@@ -367,4 +367,114 @@ contract AerodromeTest is Test {
         uint256 expectedOutput = AMOUNT * 98 / 100;
         assertEq(output, expectedOutput, "Expected output mismatch");
     }
+
+    // Test onSettle when intent is not fulfilled
+    function test_OnSettle_NotFulfilled() public {
+        // Create test data
+        address[] memory path = new address[](2);
+        path[0] = address(tokenA);
+        path[1] = address(tokenB);
+
+        bool[] memory stableFlags = new bool[](1);
+        stableFlags[0] = false;
+
+        uint256 minAmountOut = MIN_AMOUNT_OUT;
+        uint256 deadline = block.timestamp + 1 hours;
+        uint256 tipAmount = 5 ether;
+
+        // Encode the swap data
+        bytes memory data = AerodromeSwapLib.encodeSwapParams(path, stableFlags, minAmountOut, deadline, user);
+
+        // Mint tokenA to the module to be sent as tip
+        tokenA.mint(address(aerodromeModule), tipAmount);
+
+        // Record user's balance before onSettle
+        uint256 userBalanceBefore = tokenA.balanceOf(user);
+
+        // Call onSettle with isFulfilled = false from the intent contract
+        vm.prank(address(mockIntent));
+        aerodromeModule.onSettle(
+            bytes32(0), // intentId
+            address(tokenA), // asset
+            AMOUNT, // amount
+            data, // data containing receiver
+            bytes32(uint256(1)), // fulfillmentIndex
+            false, // isFulfilled = false -> should send tip to receiver
+            tipAmount // tip amount
+        );
+
+        // Check that the tip was sent to the user (receiver)
+        uint256 userBalanceAfter = tokenA.balanceOf(user);
+        assertEq(userBalanceAfter, userBalanceBefore + tipAmount, "Tip was not sent to receiver");
+    }
+
+    // Test onSettle when intent is fulfilled
+    function test_OnSettle_Fulfilled() public {
+        // Create test data
+        address[] memory path = new address[](2);
+        path[0] = address(tokenA);
+        path[1] = address(tokenB);
+
+        bool[] memory stableFlags = new bool[](1);
+        stableFlags[0] = false;
+
+        uint256 minAmountOut = MIN_AMOUNT_OUT;
+        uint256 deadline = block.timestamp + 1 hours;
+        uint256 tipAmount = 5 ether;
+
+        // Encode the swap data
+        bytes memory data = AerodromeSwapLib.encodeSwapParams(path, stableFlags, minAmountOut, deadline, user);
+
+        // Mint tokenA to the module
+        tokenA.mint(address(aerodromeModule), tipAmount);
+
+        // Record user's balance before onSettle
+        uint256 userBalanceBefore = tokenA.balanceOf(user);
+
+        // Call onSettle with isFulfilled = true from the intent contract
+        vm.prank(address(mockIntent));
+        aerodromeModule.onSettle(
+            bytes32(0), // intentId
+            address(tokenA), // asset
+            AMOUNT, // amount
+            data, // data containing receiver
+            bytes32(uint256(1)), // fulfillmentIndex
+            true, // isFulfilled = true -> should NOT send tip to receiver
+            tipAmount // tip amount
+        );
+
+        // Check that the tip was NOT sent to the user (since intent was fulfilled)
+        uint256 userBalanceAfter = tokenA.balanceOf(user);
+        assertEq(userBalanceAfter, userBalanceBefore, "Tip should not be sent when intent is fulfilled");
+    }
+
+    // Test onSettle with invalid caller
+    function test_OnSettle_InvalidCaller() public {
+        // Create test data
+        address[] memory path = new address[](2);
+        path[0] = address(tokenA);
+        path[1] = address(tokenB);
+
+        bool[] memory stableFlags = new bool[](1);
+        stableFlags[0] = false;
+
+        uint256 minAmountOut = MIN_AMOUNT_OUT;
+        uint256 deadline = block.timestamp + 1 hours;
+
+        // Encode the swap data
+        bytes memory data = AerodromeSwapLib.encodeSwapParams(path, stableFlags, minAmountOut, deadline, user);
+
+        // Try to call onSettle from unauthorized address
+        vm.prank(user);
+        vm.expectRevert("Caller is not the Intent contract");
+        aerodromeModule.onSettle(
+            bytes32(0), // intentId
+            address(tokenA), // asset
+            AMOUNT, // amount
+            data, // data
+            bytes32(uint256(1)), // fulfillmentIndex
+            false, // isFulfilled
+            TIP // tipAmount
+        );
+    }
 }
