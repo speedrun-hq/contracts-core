@@ -15,6 +15,10 @@ contract MockRouterForTests {
         pure
         returns (uint256)
     {
+        // Input validation
+        require(decimalsIn <= 30, "Source decimals too high");
+        require(decimalsOut <= 30, "Destination decimals too high");
+        
         // If decimals are the same, no conversion needed
         if (decimalsIn == decimalsOut) {
             return amountIn;
@@ -23,11 +27,20 @@ contract MockRouterForTests {
         // If destination has more decimals, multiply
         if (decimalsOut > decimalsIn) {
             uint256 factor = 10 ** (decimalsOut - decimalsIn);
+            
+            // Check for potential overflow before multiplication
+            require(
+                amountIn == 0 || (type(uint256).max / amountIn) >= factor,
+                "Decimal conversion overflow"
+            );
+            
             return amountIn * factor;
         }
 
         // If destination has fewer decimals, divide
         uint256 divider = 10 ** (decimalsIn - decimalsOut);
+        
+        // No need to check for division by zero since divider is always > 0
 
         // Round down by default (matches typical token behavior)
         return amountIn / divider;
@@ -201,7 +214,63 @@ contract RouterDecimalConversionTest is Test {
         uint8 decimalsOut = 18;
 
         // This should revert due to overflow when multiplying by 10^18
-        vm.expectRevert();
+        vm.expectRevert("Decimal conversion overflow");
         callCalculateExpectedAmount(largeAmount, decimalsIn, decimalsOut);
+    }
+    
+    /**
+     * @dev Tests excessive decimal places validation
+     */
+    function testExcessiveDecimals() public {
+        // Test with source decimals too high
+        uint256 amount = 1000;
+        uint8 excessiveDecimals = 31;
+        uint8 normalDecimals = 18;
+        
+        vm.expectRevert("Source decimals too high");
+        callCalculateExpectedAmount(amount, excessiveDecimals, normalDecimals);
+        
+        // Test with destination decimals too high
+        vm.expectRevert("Destination decimals too high");
+        callCalculateExpectedAmount(amount, normalDecimals, excessiveDecimals);
+    }
+    
+    /**
+     * @dev Tests calculation with maximum allowed decimal values
+     */
+    function testMaxAllowedDecimals() public {
+        // Test with maximum allowed decimals (30)
+        uint256 amount = 1000;
+        uint8 maxDecimals = 30;
+        uint8 normalDecimals = 18;
+        
+        // Should work without reverting
+        callCalculateExpectedAmount(amount, normalDecimals, maxDecimals);
+        
+        // Should work without reverting
+        callCalculateExpectedAmount(amount, maxDecimals, normalDecimals);
+    }
+    
+    /**
+     * @dev Tests with various edge cases
+     */
+    function testEdgeCases() public {
+        // Test with zero input amount
+        uint256 zeroAmount = 0;
+        uint8 decimalsIn = 18;
+        uint8 decimalsOut = 6;
+        
+        uint256 result = callCalculateExpectedAmount(zeroAmount, decimalsIn, decimalsOut);
+        assertEq(result, 0, "Zero input should result in zero output");
+        
+        // Test with maximum uint256 input and no decimal change
+        uint256 maxAmount = type(uint256).max;
+        
+        uint256 sameDecimalResult = callCalculateExpectedAmount(maxAmount, 18, 18);
+        assertEq(sameDecimalResult, maxAmount, "Same decimal conversion should not change amount");
+        
+        // Test with maximum uint256 input and reducing decimals
+        uint256 reducedDecimalResult = callCalculateExpectedAmount(maxAmount, 18, 17);
+        assertEq(reducedDecimalResult, maxAmount / 10, "Should reduce by factor of 10");
     }
 }

@@ -198,6 +198,10 @@ contract Router is
         pure
         returns (uint256)
     {
+        // Input validation
+        require(decimalsIn <= 30, "Source decimals too high");
+        require(decimalsOut <= 30, "Destination decimals too high");
+
         // If decimals are the same, no conversion needed
         if (decimalsIn == decimalsOut) {
             return amountIn;
@@ -206,6 +210,13 @@ contract Router is
         // If destination has more decimals, multiply
         if (decimalsOut > decimalsIn) {
             uint256 scalingFactor = 10 ** (decimalsOut - decimalsIn);
+            
+            // Check for potential overflow before multiplication
+            require(
+                amountIn == 0 || (type(uint256).max / amountIn) >= scalingFactor,
+                "Decimal conversion overflow"
+            );
+            
             return amountIn * scalingFactor;
         }
 
