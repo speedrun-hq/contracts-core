@@ -123,7 +123,7 @@ contract AerodromeModule is IntentTarget, Ownable {
 
         // Ensure the first token in the path matches the received asset
         require(path[0] == asset, "Asset mismatch");
-        
+
         // Verify that the tokens have been received
         uint256 balance = IERC20(asset).balanceOf(address(this));
         require(balance >= amount, "Insufficient token balance received");
@@ -139,8 +139,9 @@ contract AerodromeModule is IntentTarget, Ownable {
         IERC20(asset).approve(aerodromeRouter, amount);
 
         // Execute the swap on Aerodrome
-        uint256[] memory amounts = IAerodromeRouter(aerodromeRouter).swapExactTokensForTokens(amount, minAmountOut, routes, receiver, deadline);
-        
+        uint256[] memory amounts =
+            IAerodromeRouter(aerodromeRouter).swapExactTokensForTokens(amount, minAmountOut, routes, receiver, deadline);
+
         // Verify that the output amount meets the minimum expected
         require(amounts.length > 0 && amounts[amounts.length - 1] >= minAmountOut, "Insufficient output amount");
     }

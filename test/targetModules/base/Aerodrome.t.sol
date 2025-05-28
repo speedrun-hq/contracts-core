@@ -477,4 +477,169 @@ contract AerodromeTest is Test {
             TIP // tipAmount
         );
     }
+
+    // Test initiating a swap with zero address for asset
+    function test_InitiateSwap_ZeroAsset() public {
+        // Create test data
+        address[] memory path = new address[](2);
+        path[0] = address(0);
+        path[1] = address(tokenB);
+
+        bool[] memory stableFlags = new bool[](1);
+        stableFlags[0] = false;
+
+        uint256 minAmountOut = MIN_AMOUNT_OUT;
+        uint256 deadline = block.timestamp + 1 hours;
+        uint256 salt = 123;
+        uint256 gasLimit = 300000;
+
+        // Expect revert
+        vm.prank(user);
+        vm.expectRevert("Asset cannot be zero address");
+        aerodromeInitiator.initiateAerodromeSwap(
+            address(0), AMOUNT, TIP, salt, gasLimit, path, stableFlags, minAmountOut, deadline, user
+        );
+    }
+
+    // Test initiating a swap with zero amount
+    function test_InitiateSwap_ZeroAmount() public {
+        // Create test data
+        address[] memory path = new address[](2);
+        path[0] = address(tokenA);
+        path[1] = address(tokenB);
+
+        bool[] memory stableFlags = new bool[](1);
+        stableFlags[0] = false;
+
+        uint256 minAmountOut = MIN_AMOUNT_OUT;
+        uint256 deadline = block.timestamp + 1 hours;
+        uint256 salt = 123;
+        uint256 gasLimit = 300000;
+
+        // Expect revert
+        vm.prank(user);
+        vm.expectRevert("Amount must be greater than zero");
+        aerodromeInitiator.initiateAerodromeSwap(
+            address(tokenA), 0, TIP, salt, gasLimit, path, stableFlags, minAmountOut, deadline, user
+        );
+    }
+
+    // Test initiating a swap with zero gas limit
+    function test_InitiateSwap_ZeroGasLimit() public {
+        // Create test data
+        address[] memory path = new address[](2);
+        path[0] = address(tokenA);
+        path[1] = address(tokenB);
+
+        bool[] memory stableFlags = new bool[](1);
+        stableFlags[0] = false;
+
+        uint256 minAmountOut = MIN_AMOUNT_OUT;
+        uint256 deadline = block.timestamp + 1 hours;
+        uint256 salt = 123;
+
+        // Expect revert
+        vm.prank(user);
+        vm.expectRevert("Gas limit must be greater than zero");
+        aerodromeInitiator.initiateAerodromeSwap(
+            address(tokenA), AMOUNT, TIP, salt, 0, path, stableFlags, minAmountOut, deadline, user
+        );
+    }
+
+    // Test initiating a swap with expired deadline
+    function test_InitiateSwap_ExpiredDeadline() public {
+        // Create test data
+        address[] memory path = new address[](2);
+        path[0] = address(tokenA);
+        path[1] = address(tokenB);
+
+        bool[] memory stableFlags = new bool[](1);
+        stableFlags[0] = false;
+
+        uint256 minAmountOut = MIN_AMOUNT_OUT;
+        uint256 deadline = block.timestamp - 1; // Expired deadline
+        uint256 salt = 123;
+        uint256 gasLimit = 300000;
+
+        // Expect revert
+        vm.prank(user);
+        vm.expectRevert("Deadline must be in the future");
+        aerodromeInitiator.initiateAerodromeSwap(
+            address(tokenA), AMOUNT, TIP, salt, gasLimit, path, stableFlags, minAmountOut, deadline, user
+        );
+    }
+
+    // Test initiating a swap with zero address for receiver
+    function test_InitiateSwap_ZeroReceiver() public {
+        // Create test data
+        address[] memory path = new address[](2);
+        path[0] = address(tokenA);
+        path[1] = address(tokenB);
+
+        bool[] memory stableFlags = new bool[](1);
+        stableFlags[0] = false;
+
+        uint256 minAmountOut = MIN_AMOUNT_OUT;
+        uint256 deadline = block.timestamp + 1 hours;
+        uint256 salt = 123;
+        uint256 gasLimit = 300000;
+
+        // Expect revert
+        vm.prank(user);
+        vm.expectRevert("Receiver cannot be zero address");
+        aerodromeInitiator.initiateAerodromeSwap(
+            address(tokenA), AMOUNT, TIP, salt, gasLimit, path, stableFlags, minAmountOut, deadline, address(0)
+        );
+    }
+
+    // Test initiating a swap with zero minAmountOut
+    function test_InitiateSwap_ZeroMinAmountOut() public {
+        // Create test data
+        address[] memory path = new address[](2);
+        path[0] = address(tokenA);
+        path[1] = address(tokenB);
+
+        bool[] memory stableFlags = new bool[](1);
+        stableFlags[0] = false;
+
+        uint256 deadline = block.timestamp + 1 hours;
+        uint256 salt = 123;
+        uint256 gasLimit = 300000;
+
+        // Expect revert
+        vm.prank(user);
+        vm.expectRevert("Minimum output amount must be greater than zero");
+        aerodromeInitiator.initiateAerodromeSwap(
+            address(tokenA), AMOUNT, TIP, salt, gasLimit, path, stableFlags, 0, deadline, user
+        );
+    }
+
+    // Test initiating a swap with zero tip (should succeed)
+    function test_InitiateSwap_ZeroTip() public {
+        // Create test data
+        address[] memory path = new address[](2);
+        path[0] = address(tokenA);
+        path[1] = address(tokenB);
+
+        bool[] memory stableFlags = new bool[](1);
+        stableFlags[0] = false;
+
+        uint256 minAmountOut = MIN_AMOUNT_OUT;
+        uint256 deadline = block.timestamp + 1 hours;
+        uint256 salt = 123;
+        uint256 gasLimit = 300000;
+
+        // Call the initiator with zero tip
+        vm.prank(user);
+        bytes32 intentId = aerodromeInitiator.initiateAerodromeSwap(
+            address(tokenA), AMOUNT, 0, salt, gasLimit, path, stableFlags, minAmountOut, deadline, user
+        );
+
+        // Verify the intent was created
+        assertFalse(intentId == bytes32(0), "Intent ID should not be zero");
+
+        // Verify token transfer (only AMOUNT, no tip)
+        assertEq(tokenA.balanceOf(user), AMOUNT * 10 - AMOUNT, "Tokens not transferred from user");
+        assertEq(tokenA.balanceOf(address(mockIntent)), AMOUNT, "Tokens not transferred to intent contract");
+    }
 }

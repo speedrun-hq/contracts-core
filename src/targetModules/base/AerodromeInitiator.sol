@@ -103,8 +103,15 @@ contract AerodromeInitiator is Ownable {
         uint256 deadline,
         address receiver
     ) external returns (bytes32) {
+        // Input validations
+        require(asset != address(0), "Asset cannot be zero address");
+        require(amount > 0, "Amount must be greater than zero");
+        require(gasLimit > 0, "Gas limit must be greater than zero");
         require(path.length >= 2, "Invalid path");
         require(path.length - 1 == stableFlags.length, "Path and flags length mismatch");
+        require(deadline > block.timestamp, "Deadline must be in the future");
+        require(receiver != address(0), "Receiver cannot be zero address");
+        require(minAmountOut > 0, "Minimum output amount must be greater than zero");
 
         // Encode the swap parameters
         bytes memory data = AerodromeSwapLib.encodeSwapParams(path, stableFlags, minAmountOut, deadline, receiver);
