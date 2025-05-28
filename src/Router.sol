@@ -355,13 +355,13 @@ contract Router is
                 IZRC20(settlementInfo.targetZRC20).withdrawGasFeeWithGasLimit(settlementInfo.gasLimit);
         }
 
+        settlementInfo.actualAmount = settlementInfo.wantedAmount;
+
         // Check if source and target ZRC20 are the same
         if (intentInfo.zrc20 == settlementInfo.targetZRC20) {
             // No swap needed, use original amounts
             settlementInfo.amountWithTipOut = intentInfo.amountWithTip;
             settlementInfo.tipAfterSwap = wantedTip;
-            // Actual amount is exactly the wanted amount
-            settlementInfo.actualAmount = settlementInfo.wantedAmount;
         } else {
             // Approve swap module to spend tokens
             IERC20(intentInfo.zrc20).approve(swapModule, intentInfo.amountWithTip);

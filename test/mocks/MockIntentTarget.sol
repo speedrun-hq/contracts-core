@@ -18,6 +18,7 @@ contract MockIntentTarget is IntentTarget {
     bytes public lastData;
     bytes32 public lastFulfillmentIndex;
     bool public lastIsFulfilled;
+    uint256 public lastTipAmount;
 
     // Variables to track token balance during function calls
     uint256 public balanceDuringOnFulfill;
@@ -63,7 +64,8 @@ contract MockIntentTarget is IntentTarget {
         uint256 amount,
         bytes calldata data,
         bytes32 fulfillmentIndex,
-        bool isFulfilled
+        bool isFulfilled,
+        uint256 tipAmount
     ) external override {
         if (shouldRevert) {
             revert("MockIntentTarget: intentional revert in onSettle");
@@ -76,6 +78,7 @@ contract MockIntentTarget is IntentTarget {
         lastData = data;
         lastFulfillmentIndex = fulfillmentIndex;
         lastIsFulfilled = isFulfilled;
+        lastTipAmount = tipAmount;
     }
 
     /**
@@ -90,6 +93,7 @@ contract MockIntentTarget is IntentTarget {
         lastData = "";
         lastFulfillmentIndex = bytes32(0);
         lastIsFulfilled = false;
+        lastTipAmount = 0;
         shouldRevert = false;
         balanceDuringOnFulfill = 0;
         shouldCheckBalances = false;
