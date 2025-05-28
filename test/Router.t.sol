@@ -508,8 +508,42 @@ contract RouterTest is Test {
 
     function test_SetWithdrawGasLimit_ZeroValueReverts() public {
         uint256 zeroGasLimit = 0;
-        vm.expectRevert("Gas limit cannot be zero");
+        vm.expectRevert("Gas limit below minimum");
         router.setWithdrawGasLimit(zeroGasLimit);
+    }
+
+    function test_SetWithdrawGasLimit_BelowMinimumReverts() public {
+        uint256 tooLowGasLimit = 99999; // Just below minimum of 100000
+
+        vm.expectRevert("Gas limit below minimum");
+        router.setWithdrawGasLimit(tooLowGasLimit);
+    }
+
+    function test_SetWithdrawGasLimit_AboveMaximumReverts() public {
+        uint256 tooHighGasLimit = 10000001; // Just above maximum of 10000000
+
+        vm.expectRevert("Gas limit above maximum");
+        router.setWithdrawGasLimit(tooHighGasLimit);
+    }
+
+    function test_SetWithdrawGasLimit_AtMinimum() public {
+        uint256 minimumGasLimit = 100000; // Exactly at minimum
+
+        // Set at minimum should work
+        router.setWithdrawGasLimit(minimumGasLimit);
+
+        // Verify the gas limit was set
+        assertEq(router.withdrawGasLimit(), minimumGasLimit);
+    }
+
+    function test_SetWithdrawGasLimit_AtMaximum() public {
+        uint256 maximumGasLimit = 10000000; // Exactly at maximum
+
+        // Set at maximum should work
+        router.setWithdrawGasLimit(maximumGasLimit);
+
+        // Verify the gas limit was set
+        assertEq(router.withdrawGasLimit(), maximumGasLimit);
     }
 
     function test_SetWithdrawGasLimit_NonAdminReverts() public {
@@ -1094,8 +1128,48 @@ contract RouterTest is Test {
         uint256 zeroGasLimit = 0;
 
         // Attempt to set a zero gas limit
-        vm.expectRevert("Gas limit cannot be zero");
+        vm.expectRevert("Gas limit below minimum");
         router.setChainWithdrawGasLimit(chainId, zeroGasLimit);
+    }
+
+    function test_SetChainWithdrawGasLimit_BelowMinimumReverts() public {
+        uint256 chainId = 42161; // Arbitrum chain ID
+        uint256 tooLowGasLimit = 99999; // Just below minimum of 100000
+
+        // Attempt to set a gas limit below the minimum
+        vm.expectRevert("Gas limit below minimum");
+        router.setChainWithdrawGasLimit(chainId, tooLowGasLimit);
+    }
+
+    function test_SetChainWithdrawGasLimit_AboveMaximumReverts() public {
+        uint256 chainId = 42161; // Arbitrum chain ID
+        uint256 tooHighGasLimit = 10000001; // Just above maximum of 10000000
+
+        // Attempt to set a gas limit above the maximum
+        vm.expectRevert("Gas limit above maximum");
+        router.setChainWithdrawGasLimit(chainId, tooHighGasLimit);
+    }
+
+    function test_SetChainWithdrawGasLimit_AtMinimum() public {
+        uint256 chainId = 42161; // Arbitrum chain ID
+        uint256 minimumGasLimit = 100000; // Exactly at minimum
+
+        // Set at minimum should work
+        router.setChainWithdrawGasLimit(chainId, minimumGasLimit);
+
+        // Verify the custom gas limit was set
+        assertEq(router.chainWithdrawGasLimits(chainId), minimumGasLimit);
+    }
+
+    function test_SetChainWithdrawGasLimit_AtMaximum() public {
+        uint256 chainId = 42161; // Arbitrum chain ID
+        uint256 maximumGasLimit = 10000000; // Exactly at maximum
+
+        // Set at maximum should work
+        router.setChainWithdrawGasLimit(chainId, maximumGasLimit);
+
+        // Verify the custom gas limit was set
+        assertEq(router.chainWithdrawGasLimits(chainId), maximumGasLimit);
     }
 
     function test_SetChainWithdrawGasLimit_NonAdminReverts() public {

@@ -60,6 +60,10 @@ contract Router is
     // Default gas limit for withdraw operations
     uint256 private constant DEFAULT_WITHDRAW_GAS_LIMIT = 400000;
 
+    // Min and max gas limits for withdraw operations
+    uint256 private constant MIN_WITHDRAW_GAS_LIMIT = 100000;
+    uint256 private constant MAX_WITHDRAW_GAS_LIMIT = 10000000;
+
     // Current gas limit for withdraw operations (can be modified by admin)
     uint256 public withdrawGasLimit;
 
@@ -687,7 +691,8 @@ contract Router is
      * @param newGasLimit The new gas limit to set
      */
     function setWithdrawGasLimit(uint256 newGasLimit) public onlyRole(DEFAULT_ADMIN_ROLE) {
-        require(newGasLimit > 0, "Gas limit cannot be zero");
+        require(newGasLimit >= MIN_WITHDRAW_GAS_LIMIT, "Gas limit below minimum");
+        require(newGasLimit <= MAX_WITHDRAW_GAS_LIMIT, "Gas limit above maximum");
         emit WithdrawGasLimitUpdated(withdrawGasLimit, newGasLimit);
         withdrawGasLimit = newGasLimit;
     }
@@ -698,7 +703,8 @@ contract Router is
      * @param gasLimit The gas limit to set
      */
     function setChainWithdrawGasLimit(uint256 chainId, uint256 gasLimit) public onlyRole(DEFAULT_ADMIN_ROLE) {
-        require(gasLimit > 0, "Gas limit cannot be zero");
+        require(gasLimit >= MIN_WITHDRAW_GAS_LIMIT, "Gas limit below minimum");
+        require(gasLimit <= MAX_WITHDRAW_GAS_LIMIT, "Gas limit above maximum");
         chainWithdrawGasLimits[chainId] = gasLimit;
         emit ChainWithdrawGasLimitSet(chainId, gasLimit);
     }
