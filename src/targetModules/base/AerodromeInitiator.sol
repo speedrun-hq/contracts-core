@@ -2,6 +2,7 @@
 pragma solidity 0.8.26;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "../../interfaces/IIntent.sol";
 import "./AerodromeSwapLib.sol";
@@ -11,6 +12,8 @@ import "./AerodromeSwapLib.sol";
  * @dev Contract to create intents on the source chain that will execute swaps on Aerodrome DEX on Base
  */
 contract AerodromeInitiator is Ownable {
+    using SafeERC20 for IERC20;
+
     // Intent contract address
     address public intent;
 
@@ -107,7 +110,7 @@ contract AerodromeInitiator is Ownable {
         bytes memory data = AerodromeSwapLib.encodeSwapParams(path, stableFlags, minAmountOut, deadline, receiver);
 
         // Transfer tokens from sender to this contract
-        IERC20(asset).transferFrom(msg.sender, address(this), amount + tip);
+        IERC20(asset).safeTransferFrom(msg.sender, address(this), amount + tip);
 
         // Approve the Intent contract to spend the tokens
         IERC20(asset).approve(intent, amount + tip);
