@@ -27,6 +27,10 @@ contract SwapAlgebra is ISwap, Ownable {
     uint160 internal constant MIN_SQRT_RATIO = 4295128739;
     uint160 internal constant MAX_SQRT_RATIO = 1461446703485210103287273052203988822378723970342;
 
+    // Maximum allowed slippage (1%)
+    uint256 private constant MAX_SLIPPAGE = 100;
+    uint256 private constant BASIS_POINTS_DENOMINATOR = 10000;
+
     // Algebra Factory address
     IAlgebraFactory public immutable algebraFactory;
 
@@ -111,6 +115,15 @@ contract SwapAlgebra is ISwap, Ownable {
         return amounts[0];
     }
 
+    /**
+     * @dev Calculates the minimum amount out based on the given slippage tolerance
+     * @param amountOut The expected amount out
+     * @return The minimum amount out that satisfies the MAX_SLIPPAGE tolerance
+     */
+    function calculateMinAmountOutWithSlippage(uint256 amountOut) public pure returns (uint256) {
+        return (amountOut * (BASIS_POINTS_DENOMINATOR - MAX_SLIPPAGE)) / BASIS_POINTS_DENOMINATOR;
+    }
+
     /// @notice Returns a valid `limitSqrtPrice` just beyond the current price
     /// @param zeroForOne If true, token0 → token1; else token1 → token0
     function getValidLimitSqrtPrice(bool zeroForOne) internal pure returns (uint160) {
@@ -153,6 +166,12 @@ contract SwapAlgebra is ISwap, Ownable {
         uint256 gasFee,
         string memory tokenName
     ) public returns (uint256 amountOut) {
+        // Record initial balances for slippage calculation
+        uint256 initialOutBalance = 0;
+        if (tokenOut != address(0)) {
+            initialOutBalance = IERC20(tokenOut).balanceOf(address(this));
+        }
+
         // Transfer tokens from sender to this contract
         IERC20(tokenIn).safeTransferFrom(msg.sender, address(this), amountIn);
 
@@ -234,8 +253,24 @@ contract SwapAlgebra is ISwap, Ownable {
                 emit SwapWithIntermediary(tokenIn, intermediaryToken, tokenOut, amountInForMainSwap, amountOut);
             }
 
+            // Calculate actual balance change to account for any existing balance
+            uint256 finalOutBalance = IERC20(tokenOut).balanceOf(address(this));
+            uint256 actualAmountOut = finalOutBalance - initialOutBalance;
+
+            // Apply slippage check using constant MAX_SLIPPAGE (1%)
+            uint256 minRequiredAmount = calculateMinAmountOutWithSlippage(amountOut);
+
+            // Verify we received at least the minimum amount expected
+            require(actualAmountOut >= minRequiredAmount, "Slippage tolerance exceeded");
+
+            // Use the actual received amount for the transfer to the user
+            uint256 amountToTransfer = actualAmountOut;
+
             // Transfer output tokens to sender
-            IERC20(tokenOut).safeTransfer(msg.sender, amountOut);
+            IERC20(tokenOut).safeTransfer(msg.sender, amountToTransfer);
+
+            // Update the return value to match what was actually received and transferred
+            amountOut = amountToTransfer;
         }
 
         return amountOut;
@@ -260,7 +295,6 @@ contract SwapAlgebra is ISwap, Ownable {
 
         IERC20(tokenIn).approve(pool, amountIn);
 
-        // (uint160 currentPrice, , , , , , ) = IAlgebraPool(pool).globalState();
         uint160 limitSqrtPrice = getValidLimitSqrtPrice(zeroToOne);
 
         // Perform the swap
