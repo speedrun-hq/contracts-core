@@ -263,14 +263,11 @@ contract SwapAlgebra is ISwap, Ownable {
             // Verify we received at least the minimum amount expected
             require(actualAmountOut >= minRequiredAmount, "Slippage tolerance exceeded");
 
-            // Use the actual received amount for the transfer to the user
-            uint256 amountToTransfer = actualAmountOut;
-
             // Transfer output tokens to sender
-            IERC20(tokenOut).safeTransfer(msg.sender, amountToTransfer);
+            IERC20(tokenOut).safeTransfer(msg.sender, actualAmountOut);
 
             // Update the return value to match what was actually received and transferred
-            amountOut = amountToTransfer;
+            amountOut = actualAmountOut;
         }
 
         return amountOut;
