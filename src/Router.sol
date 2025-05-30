@@ -60,6 +60,10 @@ contract Router is
     // Default gas limit for withdraw operations
     uint256 private constant DEFAULT_WITHDRAW_GAS_LIMIT = 400000;
 
+    // Min and max gas limits for withdraw operations
+    uint256 private constant MIN_WITHDRAW_GAS_LIMIT = 100000;
+    uint256 private constant MAX_WITHDRAW_GAS_LIMIT = 10000000;
+
     // Current gas limit for withdraw operations (can be modified by admin)
     uint256 public withdrawGasLimit;
 
@@ -198,6 +202,10 @@ contract Router is
         pure
         returns (uint256)
     {
+        // Input validation
+        require(decimalsIn <= 30, "Source decimals too high");
+        require(decimalsOut <= 30, "Destination decimals too high");
+
         // If decimals are the same, no conversion needed
         if (decimalsIn == decimalsOut) {
             return amountIn;
@@ -206,6 +214,10 @@ contract Router is
         // If destination has more decimals, multiply
         if (decimalsOut > decimalsIn) {
             uint256 scalingFactor = 10 ** (decimalsOut - decimalsIn);
+
+            // Check for potential overflow before multiplication
+            require(amountIn == 0 || (type(uint256).max / amountIn) >= scalingFactor, "Decimal conversion overflow");
+
             return amountIn * scalingFactor;
         }
 
@@ -364,6 +376,7 @@ contract Router is
             settlementInfo.tipAfterSwap = wantedTip;
         } else {
             // Approve swap module to spend tokens
+            IERC20(intentInfo.zrc20).approve(swapModule, 0);
             IERC20(intentInfo.zrc20).approve(swapModule, intentInfo.amountWithTip);
 
             // Perform swap through swap module
@@ -415,6 +428,7 @@ contract Router is
         bytes memory settlementPayload
     ) internal {
         // Transfer tokens to the target Intent contract
+        IERC20(zrc20).approve(intentContract, 0);
         IERC20(zrc20).approve(intentContract, amount);
 
         // Create a MessageContext
@@ -458,7 +472,9 @@ contract Router is
         });
 
         // Approve gateway to spend tokens
+        IERC20(targetZRC20).approve(gateway, 0);
         IERC20(targetZRC20).approve(gateway, amount);
+        IERC20(gasZRC20).approve(gateway, 0);
         IERC20(gasZRC20).approve(gateway, gasFee);
 
         // Call gateway to withdraw and call intent contract
@@ -675,7 +691,8 @@ contract Router is
      * @param newGasLimit The new gas limit to set
      */
     function setWithdrawGasLimit(uint256 newGasLimit) public onlyRole(DEFAULT_ADMIN_ROLE) {
-        require(newGasLimit > 0, "Gas limit cannot be zero");
+        require(newGasLimit >= MIN_WITHDRAW_GAS_LIMIT, "Gas limit below minimum");
+        require(newGasLimit <= MAX_WITHDRAW_GAS_LIMIT, "Gas limit above maximum");
         emit WithdrawGasLimitUpdated(withdrawGasLimit, newGasLimit);
         withdrawGasLimit = newGasLimit;
     }
@@ -686,7 +703,8 @@ contract Router is
      * @param gasLimit The gas limit to set
      */
     function setChainWithdrawGasLimit(uint256 chainId, uint256 gasLimit) public onlyRole(DEFAULT_ADMIN_ROLE) {
-        require(gasLimit > 0, "Gas limit cannot be zero");
+        require(gasLimit >= MIN_WITHDRAW_GAS_LIMIT, "Gas limit below minimum");
+        require(gasLimit <= MAX_WITHDRAW_GAS_LIMIT, "Gas limit above maximum");
         chainWithdrawGasLimits[chainId] = gasLimit;
         emit ChainWithdrawGasLimitSet(chainId, gasLimit);
     }

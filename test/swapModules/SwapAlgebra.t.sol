@@ -111,16 +111,32 @@ contract MockAlgebraPool is IAlgebraPool {
     address public token0;
     address public token1;
     address private immutable factory;
+    bool public shouldApplySlippage;
+    uint256 public slippageAmount; // How much to reduce the output by
+    address public targetContract; // The contract we're testing (SwapAlgebra)
 
     constructor(address _token0, address _token1, address _factory) {
         token0 = _token0;
         token1 = _token1;
         factory = _factory;
+        shouldApplySlippage = false;
+        slippageAmount = 0;
+    }
+
+    // Set whether this pool should apply slippage to test slippage protection
+    function setSlippage(bool _shouldApplySlippage, uint256 _slippageAmount) external {
+        shouldApplySlippage = _shouldApplySlippage;
+        slippageAmount = _slippageAmount;
+    }
+
+    // Set the target contract that we're testing
+    function setTargetContract(address _targetContract) external {
+        targetContract = _targetContract;
     }
 
     function globalState()
         external
-        view
+        pure
         returns (
             uint160 price,
             int24 tick,
@@ -134,22 +150,28 @@ contract MockAlgebraPool is IAlgebraPool {
         return (0, 0, 0, 0, 0, 0, true);
     }
 
-    function swap(address recipient, bool zeroToOne, int256 amountRequired, uint160 limitSqrtPrice, bytes calldata data)
+    function swap(address recipient, bool zeroToOne, int256 amountRequired, uint160, bytes calldata data)
         external
         returns (int256 amount0, int256 amount1)
     {
-        // Determine which token is being swapped in
+        // Determine which token is being swapped in/out
         address tokenOut = zeroToOne ? token1 : token0;
 
         // Calculate the amount in (positive) and out (negative)
         uint256 amountIn = uint256(amountRequired);
+        uint256 amountOut = amountIn;
 
-        // Mock 1:1 swap for testing
+        // Apply slippage if configured to do so
+        if (shouldApplySlippage) {
+            amountOut = amountIn - slippageAmount;
+        }
+
+        // Mock swap with or without slippage
         if (zeroToOne) {
             amount0 = int256(amountIn); // Positive (tokens in)
-            amount1 = -int256(amountIn); // Negative (tokens out)
+            amount1 = -int256(amountOut); // Negative (tokens out)
         } else {
-            amount0 = -int256(amountIn); // Negative (tokens out)
+            amount0 = -int256(amountOut); // Negative (tokens out)
             amount1 = int256(amountIn); // Positive (tokens in)
         }
 
@@ -158,10 +180,10 @@ contract MockAlgebraPool is IAlgebraPool {
 
         // Check output token balance
         uint256 outTokenBalance = IERC20(tokenOut).balanceOf(address(this));
-        require(outTokenBalance >= amountIn, "Insufficient output token balance");
+        require(outTokenBalance >= amountOut, "Insufficient output token balance");
 
         // Transfer output tokens to the recipient
-        IERC20(tokenOut).transfer(recipient, amountIn);
+        IERC20(tokenOut).transfer(recipient, amountOut);
     }
 }
 
@@ -195,6 +217,20 @@ contract MockAlgebraFactory is IAlgebraFactory {
         (address token0, address token1) = tokenA < tokenB ? (tokenA, tokenB) : (tokenB, tokenA);
         _pools[token0][token1] = pool;
         _pools[token1][token0] = pool;
+    }
+}
+
+// Special mock contract to test the slippage protection directly
+contract MockSwapAlgebraForSlippage is SwapAlgebra {
+    constructor(address _algebraFactory, address _uniswapV2Router, address _wzeta)
+        SwapAlgebra(_algebraFactory, _uniswapV2Router, _wzeta)
+    {}
+
+    // Function that directly tests the slippage protection
+    function testSlippageProtection(uint256 expectedAmount, uint256 actualAmount) external pure {
+        // This mimics the slippage check in the swap function
+        uint256 minRequiredAmount = calculateMinAmountOutWithSlippage(expectedAmount);
+        require(actualAmount >= minRequiredAmount, "Slippage tolerance exceeded");
     }
 }
 
@@ -431,5 +467,90 @@ contract SwapAlgebraTest is Test {
     function test_RevertWhenIntermediaryTokenIsZeroAddress() public {
         vm.expectRevert("Invalid intermediary token address");
         swapAlgebra.setIntermediaryToken(TOKEN_NAME, address(0));
+    }
+
+    function test_CalculateMinAmountOutWithSlippage() public view {
+        // Test the calculation with different amounts
+        uint256 amount1 = 1000 ether;
+        uint256 amount2 = 1 ether;
+        uint256 amount3 = 100;
+
+        // Using the 1% MAX_SLIPPAGE constant in the contract
+        uint256 expectedMin1 = 990 ether; // 1000 - 1%
+        uint256 expectedMin2 = 0.99 ether; // 1 - 1%
+        uint256 expectedMin3 = 99; // 100 - 1%
+
+        assertEq(
+            swapAlgebra.calculateMinAmountOutWithSlippage(amount1), expectedMin1, "Incorrect min amount for 1000 ether"
+        );
+        assertEq(
+            swapAlgebra.calculateMinAmountOutWithSlippage(amount2), expectedMin2, "Incorrect min amount for 1 ether"
+        );
+        assertEq(swapAlgebra.calculateMinAmountOutWithSlippage(amount3), expectedMin3, "Incorrect min amount for 100");
+
+        // Test with 0 amount
+        assertEq(swapAlgebra.calculateMinAmountOutWithSlippage(0), 0, "Incorrect min amount for 0");
+    }
+
+    function test_SwapWithSlippageProtection() public {
+        uint256 initialBalance = inputToken.balanceOf(user);
+        uint256 swapAmount = AMOUNT;
+        uint256 expectedOutput = swapAmount - GAS_FEE; // 1:1 swap with gas fee deduction
+
+        vm.prank(user);
+        uint256 amountOut =
+            swapAlgebra.swap(address(inputToken), address(outputToken), swapAmount, address(gasToken), GAS_FEE);
+
+        assertEq(amountOut, expectedOutput, "Incorrect output amount");
+        assertEq(inputToken.balanceOf(user), initialBalance - swapAmount, "Input tokens not transferred from user");
+        assertEq(outputToken.balanceOf(user), expectedOutput, "Output tokens not received by user");
+        assertEq(gasToken.balanceOf(user), GAS_FEE, "Gas tokens not received by user");
+    }
+
+    function test_RevertWhenSlippageExceeded() public {
+        // Create a direct mock of SwapAlgebra just for testing slippage
+        MockSwapAlgebraForSlippage mockSwap =
+            new MockSwapAlgebraForSlippage(address(mockAlgebraFactory), address(mockUniswapV2Router), address(wzeta));
+
+        // Set up test values
+        uint256 expectedAmount = 1000 ether;
+
+        // Calculate min amount based on 1% slippage
+        uint256 minRequiredAmount = expectedAmount * 99 / 100;
+
+        // Test with amount just below the minimum (should fail)
+        uint256 tooLowAmount = minRequiredAmount - 1;
+
+        // This should revert with slippage error
+        vm.expectRevert("Slippage tolerance exceeded");
+        mockSwap.testSlippageProtection(expectedAmount, tooLowAmount);
+
+        // This should succeed (amount is exactly at minimum)
+        mockSwap.testSlippageProtection(expectedAmount, minRequiredAmount);
+
+        // This should succeed (amount is above minimum)
+        mockSwap.testSlippageProtection(expectedAmount, minRequiredAmount + 1);
+    }
+
+    function test_SwapSucceedsWithSlippageJustUnderLimit() public {
+        uint256 swapAmount = AMOUNT;
+
+        // Configure the mock pool to apply slippage
+        // Set slippage to be just under 1% of the output amount
+        uint256 outputAmount = swapAmount - GAS_FEE;
+        uint256 maxAllowedSlippage = outputAmount / 100; // 1%
+        uint256 acceptableSlippage = maxAllowedSlippage - 1; // Just under 1%
+
+        MockAlgebraPool pool = MockAlgebraPool(mockAlgebraFactory.poolByPair(address(inputToken), address(outputToken)));
+        pool.setSlippage(true, acceptableSlippage);
+
+        vm.prank(user);
+        uint256 amountOut =
+            swapAlgebra.swap(address(inputToken), address(outputToken), swapAmount, address(gasToken), GAS_FEE);
+
+        // Expected output is now reduced by the slippage
+        uint256 expectedOutput = outputAmount - acceptableSlippage;
+        assertEq(amountOut, expectedOutput, "Incorrect output amount");
+        assertEq(outputToken.balanceOf(user), expectedOutput, "Output tokens not received by user");
     }
 }

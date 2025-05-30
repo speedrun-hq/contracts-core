@@ -158,6 +158,10 @@ contract Intent is
         __Pausable_init_unchained();
         __ReentrancyGuard_init_unchained();
 
+        // Validate addresses
+        require(_gateway != address(0), "Gateway cannot be zero address");
+        require(_router != address(0), "Router cannot be zero address");
+
         // Set up admin role
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
         _grantRole(PAUSER_ROLE, msg.sender);

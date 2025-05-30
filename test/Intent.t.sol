@@ -132,6 +132,26 @@ contract IntentTest is Test {
         assertEq(intent.router(), router);
     }
 
+    function test_InitializationWithZeroAddresses() public {
+        // Deploy a new implementation
+        Intent newImplementation = new Intent(false);
+
+        // Prepare initialization data with zero gateway
+        bytes memory initDataZeroGateway = abi.encodeWithSelector(Intent.initialize.selector, address(0), router);
+
+        // Deploy proxy with zero gateway
+        vm.expectRevert("Gateway cannot be zero address");
+        new ERC1967Proxy(address(newImplementation), initDataZeroGateway);
+
+        // Prepare initialization data with zero router
+        bytes memory initDataZeroRouter =
+            abi.encodeWithSelector(Intent.initialize.selector, address(gateway), address(0));
+
+        // Deploy proxy with zero router
+        vm.expectRevert("Router cannot be zero address");
+        new ERC1967Proxy(address(newImplementation), initDataZeroRouter);
+    }
+
     function test_ComputeIntentId() public {
         owner = owner;
 
