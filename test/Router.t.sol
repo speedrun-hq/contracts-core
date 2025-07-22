@@ -1392,7 +1392,7 @@ contract RouterTest is Test {
         // even better with an explicit check of the settlement payload
     }
 
-    function test_OnCall_InvalidSwapAmountOut() public {
+    function test_OnCall_SwapSurplusHandling() public {
         // Setup intent contract
         uint256 sourceChainId = 1;
         uint256 targetChainId = 2;
@@ -1421,7 +1421,7 @@ contract RouterTest is Test {
         // Set modest slippage (5%)
         swapModule.setSlippage(500);
 
-        // Set a custom amount out for testing that is more than the wanted amount
+        // Set a custom amount out for testing that is more than the wanted amount (surplus)
         swapModule.setCustomAmountOut(amount + tip + 1 ether);
 
         // Mock setup for IZRC20 withdrawGasFeeWithGasLimit
@@ -1446,10 +1446,11 @@ contract RouterTest is Test {
             senderEVM: sourceIntentContract
         });
 
-        // Call onCall
+        // Call onCall - should succeed even with surplus
         vm.prank(address(gateway));
-        vm.expectRevert("Swap returned invalid amount");
         router.onCall(context, address(inputToken), amount + tip, intentPayloadBytes);
+
+        // Test passes if no revert occurs - surplus is handled gracefully
     }
 
     function test_OnCall_UsesCustomGasLimitFromPayload() public {

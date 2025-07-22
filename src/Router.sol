@@ -389,11 +389,13 @@ contract Router is
                 zrc20ToTokenName[intentInfo.zrc20]
             );
 
-            // Validate that swap result is not greater than expected amount
-            require(wantedAmountWithTip >= settlementInfo.amountWithTipOut, "Swap returned invalid amount");
-
             // Calculate slippage difference and adjust tip accordingly
-            uint256 slippageAndFeeCost = wantedAmountWithTip - settlementInfo.amountWithTipOut;
+            // If swap returns more than expected (surplus), slippageAndFeeCost will be 0
+            // Note: Surplus amounts are currently ignored as they are too small to handle
+            // This will be addressed in future updates
+            uint256 slippageAndFeeCost = wantedAmountWithTip > settlementInfo.amountWithTipOut
+                ? wantedAmountWithTip - settlementInfo.amountWithTipOut
+                : 0;
 
             // Check if tip covers the slippage and fee costs
             if (wantedTip > slippageAndFeeCost) {
