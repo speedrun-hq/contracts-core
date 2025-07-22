@@ -92,13 +92,26 @@ contract Router is
     mapping(uint256 => uint256) public chainWithdrawGasLimits;
 
     // Event emitted when an intent contract is set
-    event IntentContractSet(uint256 indexed chainId, address indexed intentContract);
+    event IntentContractSet(
+        uint256 indexed chainId,
+        address indexed intentContract
+    );
     // Event emitted when a new token is added
     event TokenAdded(string indexed name);
     // Event emitted when a token association is added
-    event TokenAssociationAdded(string indexed name, uint256 indexed chainId, address asset, address zrc20);
+    event TokenAssociationAdded(
+        string indexed name,
+        uint256 indexed chainId,
+        address asset,
+        address zrc20
+    );
     // Event emitted when a token association is updated
-    event TokenAssociationUpdated(string indexed name, uint256 indexed chainId, address asset, address zrc20);
+    event TokenAssociationUpdated(
+        string indexed name,
+        uint256 indexed chainId,
+        address asset,
+        address zrc20
+    );
     // Event emitted when a token association is removed
     event TokenAssociationRemoved(string indexed name, uint256 indexed chainId);
     // Event emitted when an intent settlement is forwarded
@@ -111,9 +124,15 @@ contract Router is
         uint256 tip
     );
     // Event emitted when the gateway is updated
-    event GatewayUpdated(address indexed oldGateway, address indexed newGateway);
+    event GatewayUpdated(
+        address indexed oldGateway,
+        address indexed newGateway
+    );
     // Event emitted when the swap module is updated
-    event SwapModuleUpdated(address indexed oldSwapModule, address indexed newSwapModule);
+    event SwapModuleUpdated(
+        address indexed oldSwapModule,
+        address indexed newSwapModule
+    );
     // Event emitted when the global withdraw gas limit is updated
     event WithdrawGasLimitUpdated(uint256 oldGasLimit, uint256 newGasLimit);
     // Event emitted when a chain-specific withdraw gas limit is set
@@ -131,7 +150,10 @@ contract Router is
      * @param _gateway The address of the gateway contract
      * @param _swapModule The address of the swap module contract
      */
-    function initialize(address _gateway, address _swapModule) public initializer {
+    function initialize(
+        address _gateway,
+        address _swapModule
+    ) public initializer {
         __AccessControl_init();
         __UUPSUpgradeable_init_unchained();
         __Pausable_init_unchained();
@@ -153,7 +175,9 @@ contract Router is
      * @dev Function that authorizes an upgrade, can only be called by an account with the admin role
      * @param newImplementation Address of the new implementation
      */
-    function _authorizeUpgrade(address newImplementation) internal override onlyRole(DEFAULT_ADMIN_ROLE) {}
+    function _authorizeUpgrade(
+        address newImplementation
+    ) internal override onlyRole(DEFAULT_ADMIN_ROLE) {}
 
     /**
      * @dev Pauses the contract, preventing onCall operations
@@ -174,7 +198,9 @@ contract Router is
      * @dev Updates the gateway address
      * @param _gateway New gateway address
      */
-    function updateGateway(address _gateway) external onlyRole(DEFAULT_ADMIN_ROLE) {
+    function updateGateway(
+        address _gateway
+    ) external onlyRole(DEFAULT_ADMIN_ROLE) {
         require(_gateway != address(0), "Gateway cannot be zero address");
         emit GatewayUpdated(gateway, _gateway);
         gateway = _gateway;
@@ -184,8 +210,13 @@ contract Router is
      * @dev Updates the swap module address
      * @param _swapModule New swap module address
      */
-    function updateSwapModule(address _swapModule) external onlyRole(DEFAULT_ADMIN_ROLE) {
-        require(_swapModule != address(0), "Swap module cannot be zero address");
+    function updateSwapModule(
+        address _swapModule
+    ) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        require(
+            _swapModule != address(0),
+            "Swap module cannot be zero address"
+        );
         emit SwapModuleUpdated(swapModule, _swapModule);
         swapModule = _swapModule;
     }
@@ -197,11 +228,11 @@ contract Router is
      * @param decimalsOut The decimal places of the destination token
      * @return The expected amount with the destination token's decimal precision
      */
-    function calculateExpectedAmount(uint256 amountIn, uint8 decimalsIn, uint8 decimalsOut)
-        public
-        pure
-        returns (uint256)
-    {
+    function calculateExpectedAmount(
+        uint256 amountIn,
+        uint8 decimalsIn,
+        uint8 decimalsOut
+    ) public pure returns (uint256) {
         // Input validation
         require(decimalsIn <= 30, "Source decimals too high");
         require(decimalsOut <= 30, "Destination decimals too high");
@@ -216,7 +247,11 @@ contract Router is
             uint256 scalingFactor = 10 ** (decimalsOut - decimalsIn);
 
             // Check for potential overflow before multiplication
-            require(amountIn == 0 || (type(uint256).max / amountIn) >= scalingFactor, "Decimal conversion overflow");
+            require(
+                amountIn == 0 ||
+                    (type(uint256).max / amountIn) >= scalingFactor,
+                "Decimal conversion overflow"
+            );
 
             return amountIn * scalingFactor;
         }
@@ -231,7 +266,8 @@ contract Router is
     modifier onlyGatewayOrIntent() {
         // Allow calls from gateway or registered intent contracts
         require(
-            msg.sender == gateway || intentContracts[block.chainid] == msg.sender,
+            msg.sender == gateway ||
+                intentContracts[block.chainid] == msg.sender,
             "Only gateway or intent contract can call this function"
         );
         _;
@@ -251,10 +287,12 @@ contract Router is
         bytes calldata payload
     ) external override onlyGatewayOrIntent whenNotPaused {
         // Decode intent payload
-        PayloadUtils.IntentPayload memory intentPayload = PayloadUtils.decodeIntentPayload(payload);
+        PayloadUtils.IntentPayload memory intentPayload = PayloadUtils
+            .decodeIntentPayload(payload);
 
         // Check if target chain is ZetaChain
-        bool isZetaChainDestination = intentPayload.targetChain == block.chainid;
+        bool isZetaChainDestination = intentPayload.targetChain ==
+            block.chainid;
 
         // Create intent information struct
         IntentInformation memory intentInfo = IntentInformation({
@@ -269,7 +307,9 @@ contract Router is
         SettlementInfo memory settlementInfo = _processIntent(intentInfo);
 
         // Convert receiver from bytes to address
-        address receiverAddress = PayloadUtils.bytesToAddress(intentPayload.receiver);
+        address receiverAddress = PayloadUtils.bytesToAddress(
+            intentPayload.receiver
+        );
 
         // Encode settlement payload
         bytes memory settlementPayload = PayloadUtils.encodeSettlementPayload(
@@ -320,23 +360,34 @@ contract Router is
      * @dev Internal function to process the intent, convert amounts, and returns the settlement info
      * @param intentInfo The struct containing all intent processing information
      */
-    function _processIntent(IntentInformation memory intentInfo)
-        internal
-        returns (SettlementInfo memory settlementInfo)
-    {
+    function _processIntent(
+        IntentInformation memory intentInfo
+    ) internal returns (SettlementInfo memory settlementInfo) {
         // Verify the call is coming from a registered intent contract
         require(
-            intentContracts[intentInfo.context.chainID] == intentInfo.context.senderEVM,
+            intentContracts[intentInfo.context.chainID] ==
+                intentInfo.context.senderEVM,
             "Call must be from intent contract"
         );
 
         // Get token association for target chain
-        (settlementInfo.targetAsset, settlementInfo.targetZRC20,) =
-            getTokenAssociation(intentInfo.zrc20, intentInfo.intentPayload.targetChain);
+        (
+            settlementInfo.targetAsset,
+            settlementInfo.targetZRC20,
+
+        ) = getTokenAssociation(
+            intentInfo.zrc20,
+            intentInfo.intentPayload.targetChain
+        );
 
         // Get intent contract on target chain
-        settlementInfo.intentContract = intentContracts[intentInfo.intentPayload.targetChain];
-        require(settlementInfo.intentContract != address(0), "Intent contract not set for target chain");
+        settlementInfo.intentContract = intentContracts[
+            intentInfo.intentPayload.targetChain
+        ];
+        require(
+            settlementInfo.intentContract != address(0),
+            "Intent contract not set for target chain"
+        );
 
         // Get decimals for source and target tokens
         uint8 sourceDecimals = IZRC20(intentInfo.zrc20).decimals();
@@ -345,15 +396,24 @@ contract Router is
         // Convert amounts to target token decimal representation
         uint256 wantedAmountWithTip;
         uint256 wantedTip;
-        (settlementInfo.wantedAmount, wantedTip, wantedAmountWithTip) = _convertAmountsForDecimals(
-            intentInfo.intentPayload.amount, intentInfo.amountWithTip, sourceDecimals, targetDecimals
+        (
+            settlementInfo.wantedAmount,
+            wantedTip,
+            wantedAmountWithTip
+        ) = _convertAmountsForDecimals(
+            intentInfo.intentPayload.amount,
+            intentInfo.amountWithTip,
+            sourceDecimals,
+            targetDecimals
         );
 
         // Get the appropriate gas limit for the target chain - use custom gas limit if provided, otherwise fallback to default
         if (intentInfo.intentPayload.gasLimit > 0) {
             settlementInfo.gasLimit = intentInfo.intentPayload.gasLimit;
         } else {
-            settlementInfo.gasLimit = _getChainGasLimit(intentInfo.intentPayload.targetChain);
+            settlementInfo.gasLimit = _getChainGasLimit(
+                intentInfo.intentPayload.targetChain
+            );
         }
 
         // Initialize gas fee variables
@@ -363,8 +423,9 @@ contract Router is
         // Only get gas fee if the destination is not ZetaChain
         if (!intentInfo.isZetaChainDestination) {
             // Get gas fee info from target ZRC20
-            (settlementInfo.gasZRC20, settlementInfo.gasFee) =
-                IZRC20(settlementInfo.targetZRC20).withdrawGasFeeWithGasLimit(settlementInfo.gasLimit);
+            (settlementInfo.gasZRC20, settlementInfo.gasFee) = IZRC20(
+                settlementInfo.targetZRC20
+            ).withdrawGasFeeWithGasLimit(settlementInfo.gasLimit);
         }
 
         settlementInfo.actualAmount = settlementInfo.wantedAmount;
@@ -377,7 +438,10 @@ contract Router is
         } else {
             // Approve swap module to spend tokens
             IERC20(intentInfo.zrc20).approve(swapModule, 0);
-            IERC20(intentInfo.zrc20).approve(swapModule, intentInfo.amountWithTip);
+            IERC20(intentInfo.zrc20).approve(
+                swapModule,
+                intentInfo.amountWithTip
+            );
 
             // Perform swap through swap module
             settlementInfo.amountWithTipOut = ISwap(swapModule).swap(
@@ -389,11 +453,14 @@ contract Router is
                 zrc20ToTokenName[intentInfo.zrc20]
             );
 
-            // Validate that swap result is not greater than expected amount
-            require(wantedAmountWithTip >= settlementInfo.amountWithTipOut, "Swap returned invalid amount");
-
             // Calculate slippage difference and adjust tip accordingly
-            uint256 slippageAndFeeCost = wantedAmountWithTip - settlementInfo.amountWithTipOut;
+            // If swap returns more than expected (surplus), slippageAndFeeCost will be 0
+            // Note: Surplus amounts are currently ignored as they are too small to handle
+            // This will be addressed in future updates
+            uint256 slippageAndFeeCost = wantedAmountWithTip >
+                settlementInfo.amountWithTipOut
+                ? wantedAmountWithTip - settlementInfo.amountWithTipOut
+                : 0;
 
             // Check if tip covers the slippage and fee costs
             if (wantedTip > slippageAndFeeCost) {
@@ -405,9 +472,14 @@ contract Router is
                 // Calculate how much remaining slippage to cover from the amount
                 uint256 remainingCost = slippageAndFeeCost - wantedTip;
                 // Ensure the amount is greater than the remaining cost, otherwise fail
-                require(settlementInfo.wantedAmount > remainingCost, "Amount insufficient to cover costs after tip");
+                require(
+                    settlementInfo.wantedAmount > remainingCost,
+                    "Amount insufficient to cover costs after tip"
+                );
                 // Reduce the actual amount by the remaining cost
-                settlementInfo.actualAmount = settlementInfo.wantedAmount - remainingCost;
+                settlementInfo.actualAmount =
+                    settlementInfo.wantedAmount -
+                    remainingCost;
             }
         }
 
@@ -432,7 +504,9 @@ contract Router is
         IERC20(zrc20).approve(intentContract, amount);
 
         // Create a MessageContext
-        IIntent.MessageContext memory intentContext = IIntent.MessageContext({sender: address(this)});
+        IIntent.MessageContext memory intentContext = IIntent.MessageContext({
+            sender: address(this)
+        });
 
         // Call the intent contract directly
         IIntent(intentContract).onCall(intentContext, settlementPayload);
@@ -460,7 +534,10 @@ contract Router is
         uint256 gasLimit
     ) internal {
         // Prepare call options with provided gas limit
-        IGateway.CallOptions memory callOptions = IGateway.CallOptions({gasLimit: gasLimit, isArbitraryCall: false});
+        IGateway.CallOptions memory callOptions = IGateway.CallOptions({
+            gasLimit: gasLimit,
+            isArbitraryCall: false
+        });
 
         // Prepare revert options
         IGateway.RevertOptions memory revertOptions = IGateway.RevertOptions({
@@ -479,7 +556,12 @@ contract Router is
 
         // Call gateway to withdraw and call intent contract
         IGateway(gateway).withdrawAndCall(
-            abi.encodePacked(intentContract), amount, targetZRC20, settlementPayload, callOptions, revertOptions
+            abi.encodePacked(intentContract),
+            amount,
+            targetZRC20,
+            settlementPayload,
+            callOptions,
+            revertOptions
         );
     }
 
@@ -498,10 +580,26 @@ contract Router is
         uint256 amountWithTip,
         uint8 sourceDecimals,
         uint8 targetDecimals
-    ) private pure returns (uint256 wantedAmount, uint256 wantedTip, uint256 wantedAmountWithTip) {
+    )
+        private
+        pure
+        returns (
+            uint256 wantedAmount,
+            uint256 wantedTip,
+            uint256 wantedAmountWithTip
+        )
+    {
         // Convert the individual amount and the total amount with tip
-        wantedAmount = calculateExpectedAmount(amount, sourceDecimals, targetDecimals);
-        wantedAmountWithTip = calculateExpectedAmount(amountWithTip, sourceDecimals, targetDecimals);
+        wantedAmount = calculateExpectedAmount(
+            amount,
+            sourceDecimals,
+            targetDecimals
+        );
+        wantedAmountWithTip = calculateExpectedAmount(
+            amountWithTip,
+            sourceDecimals,
+            targetDecimals
+        );
 
         // Calculate tip as the difference to maintain the invariant:
         // wantedAmount + wantedTip == wantedAmountWithTip
@@ -522,8 +620,14 @@ contract Router is
      * @param chainId The chain ID to set the intent contract for
      * @param intentContract The address of the intent contract
      */
-    function setIntentContract(uint256 chainId, address intentContract) public onlyRole(DEFAULT_ADMIN_ROLE) {
-        require(intentContract != address(0), "Invalid intent contract address");
+    function setIntentContract(
+        uint256 chainId,
+        address intentContract
+    ) public onlyRole(DEFAULT_ADMIN_ROLE) {
+        require(
+            intentContract != address(0),
+            "Invalid intent contract address"
+        );
         intentContracts[chainId] = intentContract;
         emit IntentContractSet(chainId, intentContract);
     }
@@ -541,7 +645,9 @@ contract Router is
      * @dev Adds a new supported token
      * @param name The name of the token (e.g., "USDC")
      */
-    function addToken(string calldata name) public onlyRole(DEFAULT_ADMIN_ROLE) {
+    function addToken(
+        string calldata name
+    ) public onlyRole(DEFAULT_ADMIN_ROLE) {
         require(bytes(name).length > 0, "Token name cannot be empty");
         require(!_supportedTokens[name], "Token already exists");
 
@@ -557,14 +663,19 @@ contract Router is
      * @param asset The ERC20 address on the source chain
      * @param zrc20 The ZRC20 address on ZetaChain
      */
-    function addTokenAssociation(string calldata name, uint256 chainId, address asset, address zrc20)
-        public
-        onlyRole(DEFAULT_ADMIN_ROLE)
-    {
+    function addTokenAssociation(
+        string calldata name,
+        uint256 chainId,
+        address asset,
+        address zrc20
+    ) public onlyRole(DEFAULT_ADMIN_ROLE) {
         require(_supportedTokens[name], "Token does not exist");
         require(asset != address(0), "Invalid asset address");
         require(zrc20 != address(0), "Invalid ZRC20 address");
-        require(_tokenAssets[name][chainId] == address(0), "Association already exists");
+        require(
+            _tokenAssets[name][chainId] == address(0),
+            "Association already exists"
+        );
 
         _tokenAssets[name][chainId] = asset;
         _tokenZrc20s[name][chainId] = zrc20;
@@ -581,14 +692,19 @@ contract Router is
      * @param asset The new ERC20 address on the source chain
      * @param zrc20 The new ZRC20 address on ZetaChain
      */
-    function updateTokenAssociation(string calldata name, uint256 chainId, address asset, address zrc20)
-        public
-        onlyRole(DEFAULT_ADMIN_ROLE)
-    {
+    function updateTokenAssociation(
+        string calldata name,
+        uint256 chainId,
+        address asset,
+        address zrc20
+    ) public onlyRole(DEFAULT_ADMIN_ROLE) {
         require(_supportedTokens[name], "Token does not exist");
         require(asset != address(0), "Invalid asset address");
         require(zrc20 != address(0), "Invalid ZRC20 address");
-        require(_tokenAssets[name][chainId] != address(0), "Association does not exist");
+        require(
+            _tokenAssets[name][chainId] != address(0),
+            "Association does not exist"
+        );
 
         _tokenAssets[name][chainId] = asset;
         _tokenZrc20s[name][chainId] = zrc20;
@@ -602,9 +718,15 @@ contract Router is
      * @param name The name of the token
      * @param chainId The chain ID to remove the association for
      */
-    function removeTokenAssociation(string calldata name, uint256 chainId) public onlyRole(DEFAULT_ADMIN_ROLE) {
+    function removeTokenAssociation(
+        string calldata name,
+        uint256 chainId
+    ) public onlyRole(DEFAULT_ADMIN_ROLE) {
         require(_supportedTokens[name], "Token does not exist");
-        require(_tokenAssets[name][chainId] != address(0), "Association does not exist");
+        require(
+            _tokenAssets[name][chainId] != address(0),
+            "Association does not exist"
+        );
 
         delete _tokenAssets[name][chainId];
         delete _tokenZrc20s[name][chainId];
@@ -630,16 +752,26 @@ contract Router is
      * @return zrc20Addr The ZRC20 address on ZetaChain
      * @return chainIdValue The chain ID where the asset exists
      */
-    function getTokenAssociation(address zrc20, uint256 chainId)
+    function getTokenAssociation(
+        address zrc20,
+        uint256 chainId
+    )
         public
         view
         returns (address asset, address zrc20Addr, uint256 chainIdValue)
     {
         string memory name = zrc20ToTokenName[zrc20];
         require(_supportedTokens[name], "Token does not exist");
-        require(_tokenAssets[name][chainId] != address(0), "Association does not exist");
+        require(
+            _tokenAssets[name][chainId] != address(0),
+            "Association does not exist"
+        );
 
-        return (_tokenAssets[name][chainId], _tokenZrc20s[name][chainId], chainId);
+        return (
+            _tokenAssets[name][chainId],
+            _tokenZrc20s[name][chainId],
+            chainId
+        );
     }
 
     /**
@@ -649,10 +781,16 @@ contract Router is
      * @return assets Array of asset addresses
      * @return zrc20s Array of ZRC20 addresses
      */
-    function getTokenAssociations(string calldata name)
+    function getTokenAssociations(
+        string calldata name
+    )
         public
         view
-        returns (uint256[] memory chainIds, address[] memory assets, address[] memory zrc20s)
+        returns (
+            uint256[] memory chainIds,
+            address[] memory assets,
+            address[] memory zrc20s
+        )
     {
         require(_supportedTokens[name], "Token does not exist");
 
@@ -690,9 +828,17 @@ contract Router is
      * @dev Updates the withdraw gas limit
      * @param newGasLimit The new gas limit to set
      */
-    function setWithdrawGasLimit(uint256 newGasLimit) public onlyRole(DEFAULT_ADMIN_ROLE) {
-        require(newGasLimit >= MIN_WITHDRAW_GAS_LIMIT, "Gas limit below minimum");
-        require(newGasLimit <= MAX_WITHDRAW_GAS_LIMIT, "Gas limit above maximum");
+    function setWithdrawGasLimit(
+        uint256 newGasLimit
+    ) public onlyRole(DEFAULT_ADMIN_ROLE) {
+        require(
+            newGasLimit >= MIN_WITHDRAW_GAS_LIMIT,
+            "Gas limit below minimum"
+        );
+        require(
+            newGasLimit <= MAX_WITHDRAW_GAS_LIMIT,
+            "Gas limit above maximum"
+        );
         emit WithdrawGasLimitUpdated(withdrawGasLimit, newGasLimit);
         withdrawGasLimit = newGasLimit;
     }
@@ -702,7 +848,10 @@ contract Router is
      * @param chainId The chain ID to set the gas limit for
      * @param gasLimit The gas limit to set
      */
-    function setChainWithdrawGasLimit(uint256 chainId, uint256 gasLimit) public onlyRole(DEFAULT_ADMIN_ROLE) {
+    function setChainWithdrawGasLimit(
+        uint256 chainId,
+        uint256 gasLimit
+    ) public onlyRole(DEFAULT_ADMIN_ROLE) {
         require(gasLimit >= MIN_WITHDRAW_GAS_LIMIT, "Gas limit below minimum");
         require(gasLimit <= MAX_WITHDRAW_GAS_LIMIT, "Gas limit above maximum");
         chainWithdrawGasLimits[chainId] = gasLimit;
@@ -713,7 +862,9 @@ contract Router is
      * @dev Removes a custom gas limit for a specific chain
      * @param chainId The chain ID to remove the gas limit for
      */
-    function removeChainWithdrawGasLimit(uint256 chainId) public onlyRole(DEFAULT_ADMIN_ROLE) {
+    function removeChainWithdrawGasLimit(
+        uint256 chainId
+    ) public onlyRole(DEFAULT_ADMIN_ROLE) {
         delete chainWithdrawGasLimits[chainId];
         emit ChainWithdrawGasLimitRemoved(chainId);
     }
@@ -732,7 +883,9 @@ contract Router is
      * @param chainId The chain ID to get the gas limit for
      * @return The gas limit to use for the specified chain
      */
-    function _getChainGasLimit(uint256 chainId) internal view returns (uint256) {
+    function _getChainGasLimit(
+        uint256 chainId
+    ) internal view returns (uint256) {
         // If a chain-specific gas limit is set, use it
         uint256 chainGasLimit = chainWithdrawGasLimits[chainId];
         if (chainGasLimit > 0) {

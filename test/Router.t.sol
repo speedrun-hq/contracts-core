@@ -30,10 +30,23 @@ contract RouterTest is Test {
     address public user1;
     address public user2;
 
-    event IntentContractSet(uint256 indexed chainId, address indexed intentContract);
+    event IntentContractSet(
+        uint256 indexed chainId,
+        address indexed intentContract
+    );
     event TokenAdded(string indexed name);
-    event TokenAssociationAdded(string indexed name, uint256 indexed chainId, address asset, address zrc20);
-    event TokenAssociationUpdated(string indexed name, uint256 indexed chainId, address asset, address zrc20);
+    event TokenAssociationAdded(
+        string indexed name,
+        uint256 indexed chainId,
+        address asset,
+        address zrc20
+    );
+    event TokenAssociationUpdated(
+        string indexed name,
+        uint256 indexed chainId,
+        address asset,
+        address zrc20
+    );
     event TokenAssociationRemoved(string indexed name, uint256 indexed chainId);
     event IntentSettlementForwarded(
         bytes indexed sender,
@@ -51,15 +64,25 @@ contract RouterTest is Test {
     event ChainWithdrawGasLimitRemoved(uint256 indexed chainId);
 
     // Helper function to create a properly initialized Router
-    function createInitializedRouter(address gatewayAddr, address swapModuleAddr) internal returns (Router) {
+    function createInitializedRouter(
+        address gatewayAddr,
+        address swapModuleAddr
+    ) internal returns (Router) {
         // Deploy implementation
         Router implementation = new Router();
 
         // Prepare initialization data
-        bytes memory initData = abi.encodeWithSelector(Router.initialize.selector, gatewayAddr, swapModuleAddr);
+        bytes memory initData = abi.encodeWithSelector(
+            Router.initialize.selector,
+            gatewayAddr,
+            swapModuleAddr
+        );
 
         // Deploy proxy
-        ERC1967Proxy proxy = new ERC1967Proxy(address(implementation), initData);
+        ERC1967Proxy proxy = new ERC1967Proxy(
+            address(implementation),
+            initData
+        );
 
         return Router(address(proxy));
     }
@@ -83,7 +106,11 @@ contract RouterTest is Test {
 
     // Helper function to create a router with the fixed output swap module
     function createFixedOutputRouter() internal returns (Router) {
-        return createInitializedRouter(address(gateway), address(fixedOutputSwapModule));
+        return
+            createInitializedRouter(
+                address(gateway),
+                address(fixedOutputSwapModule)
+            );
     }
 
     // Helper function for access control error expectations
@@ -91,7 +118,13 @@ contract RouterTest is Test {
         bytes32 role = 0x00; // DEFAULT_ADMIN_ROLE
         vm.expectRevert(
             abi.encodeWithSelector(
-                bytes4(keccak256("AccessControlUnauthorizedAccount(address,bytes32)")), account, role
+                bytes4(
+                    keccak256(
+                        "AccessControlUnauthorizedAccount(address,bytes32)"
+                    )
+                ),
+                account,
+                role
             )
         );
     }
@@ -191,8 +224,11 @@ contract RouterTest is Test {
         emit TokenAssociationAdded(name, chainId, asset, zrc20);
         router.addTokenAssociation(name, chainId, asset, zrc20);
 
-        (address returnedAsset, address returnedZrc20, uint256 chainIdValue) =
-            router.getTokenAssociation(zrc20, chainId);
+        (
+            address returnedAsset,
+            address returnedZrc20,
+            uint256 chainIdValue
+        ) = router.getTokenAssociation(zrc20, chainId);
         assertEq(returnedAsset, asset);
         assertEq(returnedZrc20, zrc20);
         assertEq(chainIdValue, chainId);
@@ -259,14 +295,19 @@ contract RouterTest is Test {
         emit TokenAssociationUpdated(name, chainId, asset2, zrc20);
         router.updateTokenAssociation(name, chainId, asset2, zrc20);
 
-        (address returnedAsset, address returnedZrc20, uint256 chainIdValue) =
-            router.getTokenAssociation(zrc20, chainId);
+        (
+            address returnedAsset,
+            address returnedZrc20,
+            uint256 chainIdValue
+        ) = router.getTokenAssociation(zrc20, chainId);
         assertEq(returnedAsset, asset2);
         assertEq(returnedZrc20, zrc20);
         assertEq(chainIdValue, chainId);
     }
 
-    function test_UpdateTokenAssociation_NonExistentAssociationReverts() public {
+    function test_UpdateTokenAssociation_NonExistentAssociationReverts()
+        public
+    {
         string memory name = "USDC";
         uint256 chainId = 1;
         address asset = makeAddr("asset");
@@ -308,7 +349,9 @@ contract RouterTest is Test {
         router.getTokenAssociation(zrc20, chainId);
     }
 
-    function test_RemoveTokenAssociation_NonExistentAssociationReverts() public {
+    function test_RemoveTokenAssociation_NonExistentAssociationReverts()
+        public
+    {
         string memory name = "USDC";
         uint256 chainId = 1;
 
@@ -343,8 +386,11 @@ contract RouterTest is Test {
         router.addTokenAssociation(name, chainId1, asset1, zrc20);
         router.addTokenAssociation(name, chainId2, asset2, zrc20);
 
-        (uint256[] memory chainIds, address[] memory assets, address[] memory zrc20s) =
-            router.getTokenAssociations(name);
+        (
+            uint256[] memory chainIds,
+            address[] memory assets,
+            address[] memory zrc20s
+        ) = router.getTokenAssociations(name);
         assertEq(chainIds.length, 2);
         assertEq(chainIds[0], chainId1);
         assertEq(chainIds[1], chainId2);
@@ -381,8 +427,18 @@ contract RouterTest is Test {
         router.addToken(tokenName);
         address inputAsset = makeAddr("input_asset");
         address targetAsset = makeAddr("target_asset");
-        router.addTokenAssociation(tokenName, sourceChainId, inputAsset, address(inputToken));
-        router.addTokenAssociation(tokenName, targetChainId, targetAsset, address(targetZRC20));
+        router.addTokenAssociation(
+            tokenName,
+            sourceChainId,
+            inputAsset,
+            address(inputToken)
+        );
+        router.addTokenAssociation(
+            tokenName,
+            targetChainId,
+            targetAsset,
+            address(targetZRC20)
+        );
 
         // Setup intent payload
         bytes32 intentId = keccak256("test-intent");
@@ -390,8 +446,16 @@ contract RouterTest is Test {
         uint256 tip = 10 ether;
         bytes memory receiver = abi.encodePacked(user2);
 
-        bytes memory intentPayloadBytes =
-            PayloadUtils.encodeIntentPayload(intentId, amount, tip, targetChainId, receiver, false, "", 0);
+        bytes memory intentPayloadBytes = PayloadUtils.encodeIntentPayload(
+            intentId,
+            amount,
+            tip,
+            targetChainId,
+            receiver,
+            false,
+            "",
+            0
+        );
 
         // Set modest slippage (5%)
         swapModule.setSlippage(500);
@@ -400,7 +464,10 @@ contract RouterTest is Test {
         uint256 gasFee = 1 ether;
         vm.mockCall(
             address(targetZRC20),
-            abi.encodeWithSelector(IZRC20.withdrawGasFeeWithGasLimit.selector, router.withdrawGasLimit()),
+            abi.encodeWithSelector(
+                IZRC20.withdrawGasFeeWithGasLimit.selector,
+                router.withdrawGasLimit()
+            ),
             abi.encode(address(gasZRC20), gasFee)
         );
 
@@ -412,15 +479,21 @@ contract RouterTest is Test {
         gasZRC20.mint(address(swapModule), gasFee);
 
         // Setup context
-        IGateway.ZetaChainMessageContext memory context = IGateway.ZetaChainMessageContext({
-            chainID: sourceChainId,
-            sender: abi.encodePacked(sourceIntentContract),
-            senderEVM: sourceIntentContract
-        });
+        IGateway.ZetaChainMessageContext memory context = IGateway
+            .ZetaChainMessageContext({
+                chainID: sourceChainId,
+                sender: abi.encodePacked(sourceIntentContract),
+                senderEVM: sourceIntentContract
+            });
 
         // Call onCall
         vm.prank(address(gateway));
-        router.onCall(context, address(inputToken), amount + tip, intentPayloadBytes);
+        router.onCall(
+            context,
+            address(inputToken),
+            amount + tip,
+            intentPayloadBytes
+        );
 
         // Verify approvals were made to the gateway
         assertTrue(
@@ -428,7 +501,8 @@ contract RouterTest is Test {
             "Router should approve target ZRC20 to gateway"
         );
         assertTrue(
-            gasZRC20.allowance(address(router), address(gateway)) > 0, "Router should approve gas ZRC20 to gateway"
+            gasZRC20.allowance(address(router), address(gateway)) > 0,
+            "Router should approve gas ZRC20 to gateway"
         );
     }
 
@@ -446,8 +520,18 @@ contract RouterTest is Test {
         router.addToken(tokenName);
         address inputAsset = makeAddr("input_asset");
         address targetAsset = makeAddr("target_asset");
-        router.addTokenAssociation(tokenName, sourceChainId, inputAsset, address(inputToken));
-        router.addTokenAssociation(tokenName, targetChainId, targetAsset, address(targetZRC20));
+        router.addTokenAssociation(
+            tokenName,
+            sourceChainId,
+            inputAsset,
+            address(inputToken)
+        );
+        router.addTokenAssociation(
+            tokenName,
+            targetChainId,
+            targetAsset,
+            address(targetZRC20)
+        );
 
         // Setup intent payload with a very small amount and tip
         bytes32 intentId = keccak256("test-intent");
@@ -474,7 +558,10 @@ contract RouterTest is Test {
         uint256 gasFee = 11 ether;
         vm.mockCall(
             address(targetZRC20),
-            abi.encodeWithSelector(IZRC20.withdrawGasFeeWithGasLimit.selector, router.withdrawGasLimit()),
+            abi.encodeWithSelector(
+                IZRC20.withdrawGasFeeWithGasLimit.selector,
+                router.withdrawGasLimit()
+            ),
             abi.encode(address(gasZRC20), gasFee)
         );
 
@@ -484,11 +571,12 @@ contract RouterTest is Test {
         gasZRC20.mint(address(swapModule), gasFee);
 
         // Setup context
-        IGateway.ZetaChainMessageContext memory context = IGateway.ZetaChainMessageContext({
-            chainID: sourceChainId,
-            sender: abi.encodePacked(sourceIntentContract),
-            senderEVM: sourceIntentContract
-        });
+        IGateway.ZetaChainMessageContext memory context = IGateway
+            .ZetaChainMessageContext({
+                chainID: sourceChainId,
+                sender: abi.encodePacked(sourceIntentContract),
+                senderEVM: sourceIntentContract
+            });
 
         // Call onCall and expect it to revert due to insufficient amount
         // - We're passing in 100 ether but the slippage will be 10 ether (10%)
@@ -567,8 +655,18 @@ contract RouterTest is Test {
         router.addToken(tokenName);
         address inputAsset = makeAddr("input_asset");
         address targetAsset = makeAddr("target_asset");
-        router.addTokenAssociation(tokenName, sourceChainId, inputAsset, address(inputToken));
-        router.addTokenAssociation(tokenName, targetChainId, targetAsset, address(targetZRC20));
+        router.addTokenAssociation(
+            tokenName,
+            sourceChainId,
+            inputAsset,
+            address(inputToken)
+        );
+        router.addTokenAssociation(
+            tokenName,
+            targetChainId,
+            targetAsset,
+            address(targetZRC20)
+        );
 
         // Setup intent payload with amount and small tip
         bytes32 intentId = keccak256("test-intent");
@@ -576,8 +674,16 @@ contract RouterTest is Test {
         uint256 tip = 3 ether; // Small tip that won't cover all costs
         bytes memory receiver = abi.encodePacked(user2);
 
-        bytes memory intentPayloadBytes =
-            PayloadUtils.encodeIntentPayload(intentId, amount, tip, targetChainId, receiver, false, "", 0);
+        bytes memory intentPayloadBytes = PayloadUtils.encodeIntentPayload(
+            intentId,
+            amount,
+            tip,
+            targetChainId,
+            receiver,
+            false,
+            "",
+            0
+        );
 
         // Set high slippage (8%) so we can observe amount reduction
         swapModule.setSlippage(800); // 8% slippage = 8 ether on 100 ether
@@ -586,7 +692,10 @@ contract RouterTest is Test {
         uint256 gasFee = 2 ether;
         vm.mockCall(
             address(targetZRC20),
-            abi.encodeWithSelector(IZRC20.withdrawGasFeeWithGasLimit.selector, router.withdrawGasLimit()),
+            abi.encodeWithSelector(
+                IZRC20.withdrawGasFeeWithGasLimit.selector,
+                router.withdrawGasLimit()
+            ),
             abi.encode(address(gasZRC20), gasFee)
         );
 
@@ -602,11 +711,12 @@ contract RouterTest is Test {
         gasZRC20.mint(address(swapModule), gasFee);
 
         // Setup context
-        IGateway.ZetaChainMessageContext memory context = IGateway.ZetaChainMessageContext({
-            chainID: sourceChainId,
-            sender: abi.encodePacked(sourceIntentContract),
-            senderEVM: sourceIntentContract
-        });
+        IGateway.ZetaChainMessageContext memory context = IGateway
+            .ZetaChainMessageContext({
+                chainID: sourceChainId,
+                sender: abi.encodePacked(sourceIntentContract),
+                senderEVM: sourceIntentContract
+            });
 
         // Check that we correctly set the event expectations BEFORE the call
         // Event expectations must be set before the call that emits them
@@ -622,7 +732,12 @@ contract RouterTest is Test {
 
         // Call onCall
         vm.prank(address(gateway));
-        router.onCall(context, address(inputToken), amount + tip, intentPayloadBytes);
+        router.onCall(
+            context,
+            address(inputToken),
+            amount + tip,
+            intentPayloadBytes
+        );
 
         // Verify approvals to the gateway
         assertTrue(
@@ -630,7 +745,8 @@ contract RouterTest is Test {
             "Router should approve target ZRC20 to gateway"
         );
         assertTrue(
-            gasZRC20.allowance(address(router), address(gateway)) > 0, "Router should approve gas ZRC20 to gateway"
+            gasZRC20.allowance(address(router), address(gateway)) > 0,
+            "Router should approve gas ZRC20 to gateway"
         );
 
         // At this point we've confirmed:
@@ -657,8 +773,18 @@ contract RouterTest is Test {
         fixedRouter.addToken(tokenName);
         address inputAsset = makeAddr("input_asset");
         address targetAsset = makeAddr("target_asset");
-        fixedRouter.addTokenAssociation(tokenName, sourceChainId, inputAsset, address(inputToken));
-        fixedRouter.addTokenAssociation(tokenName, targetChainId, targetAsset, address(targetZRC20));
+        fixedRouter.addTokenAssociation(
+            tokenName,
+            sourceChainId,
+            inputAsset,
+            address(inputToken)
+        );
+        fixedRouter.addTokenAssociation(
+            tokenName,
+            targetChainId,
+            targetAsset,
+            address(targetZRC20)
+        );
 
         // Setup intent payload
         bytes32 intentId = keccak256("test-intent");
@@ -666,19 +792,36 @@ contract RouterTest is Test {
         uint256 tip = 10 * 10 ** 6; // 10 USDC with 6 decimals
         bytes memory receiver = abi.encodePacked(user2);
 
-        bytes memory intentPayloadBytes =
-            PayloadUtils.encodeIntentPayload(intentId, amount, tip, targetChainId, receiver, false, "", 0);
+        bytes memory intentPayloadBytes = PayloadUtils.encodeIntentPayload(
+            intentId,
+            amount,
+            tip,
+            targetChainId,
+            receiver,
+            false,
+            "",
+            0
+        );
 
         // Mock decimals for input token (6 decimals like USDC)
-        vm.mockCall(address(inputToken), abi.encodeWithSelector(IZRC20.decimals.selector), abi.encode(uint8(6)));
+        vm.mockCall(
+            address(inputToken),
+            abi.encodeWithSelector(IZRC20.decimals.selector),
+            abi.encode(uint8(6))
+        );
 
         // Mock decimals for target token (18 decimals like most tokens)
-        vm.mockCall(address(targetZRC20), abi.encodeWithSelector(IZRC20.decimals.selector), abi.encode(uint8(18)));
+        vm.mockCall(
+            address(targetZRC20),
+            abi.encodeWithSelector(IZRC20.decimals.selector),
+            abi.encode(uint8(18))
+        );
 
         // Calculate the expected amount in target decimals
         uint256 expectedAmountInTargetDecimals = amount * 10 ** 12; // 100e6 * 10^12 = 100e18
         uint256 expectedTipInTargetDecimals = tip * 10 ** 12; // 10e6 * 10^12 = 10e18
-        uint256 expectedTotal = expectedAmountInTargetDecimals + expectedTipInTargetDecimals;
+        uint256 expectedTotal = expectedAmountInTargetDecimals +
+            expectedTipInTargetDecimals;
 
         // Set a fixed output amount that's slightly less than the converted total
         // This simulates some slippage
@@ -688,7 +831,10 @@ contract RouterTest is Test {
         uint256 gasFee = 1 ether; // 1 token with 18 decimals for gas fee
         vm.mockCall(
             address(targetZRC20),
-            abi.encodeWithSelector(IZRC20.withdrawGasFeeWithGasLimit.selector, fixedRouter.withdrawGasLimit()),
+            abi.encodeWithSelector(
+                IZRC20.withdrawGasFeeWithGasLimit.selector,
+                fixedRouter.withdrawGasLimit()
+            ),
             abi.encode(address(gasZRC20), gasFee)
         );
 
@@ -698,11 +844,12 @@ contract RouterTest is Test {
         gasZRC20.mint(address(fixedOutputSwapModule), gasFee);
 
         // Setup context
-        IGateway.ZetaChainMessageContext memory context = IGateway.ZetaChainMessageContext({
-            chainID: sourceChainId,
-            sender: abi.encodePacked(sourceIntentContract),
-            senderEVM: sourceIntentContract
-        });
+        IGateway.ZetaChainMessageContext memory context = IGateway
+            .ZetaChainMessageContext({
+                chainID: sourceChainId,
+                sender: abi.encodePacked(sourceIntentContract),
+                senderEVM: sourceIntentContract
+            });
 
         // Check event is emitted with correct values - tip should be slightly reduced due to slippage
         vm.expectEmit();
@@ -717,7 +864,12 @@ contract RouterTest is Test {
 
         // Call onCall
         vm.prank(address(gateway));
-        fixedRouter.onCall(context, address(inputToken), amount + tip, intentPayloadBytes);
+        fixedRouter.onCall(
+            context,
+            address(inputToken),
+            amount + tip,
+            intentPayloadBytes
+        );
 
         // Verify approvals were made to the gateway
         assertTrue(
@@ -725,7 +877,8 @@ contract RouterTest is Test {
             "Router should approve target ZRC20 to gateway"
         );
         assertTrue(
-            gasZRC20.allowance(address(fixedRouter), address(gateway)) > 0, "Router should approve gas ZRC20 to gateway"
+            gasZRC20.allowance(address(fixedRouter), address(gateway)) > 0,
+            "Router should approve gas ZRC20 to gateway"
         );
     }
 
@@ -770,20 +923,35 @@ contract RouterTest is Test {
         assertFalse(router.paused(), "Router should not be paused initially");
 
         // Test that someone with PAUSER_ROLE can pause
-        assertTrue(router.hasRole(router.PAUSER_ROLE(), address(this)), "Test contract should have PAUSER_ROLE");
+        assertTrue(
+            router.hasRole(router.PAUSER_ROLE(), address(this)),
+            "Test contract should have PAUSER_ROLE"
+        );
         router.pause();
-        assertTrue(router.paused(), "Router should be paused after calling pause()");
+        assertTrue(
+            router.paused(),
+            "Router should be paused after calling pause()"
+        );
 
         // Test that someone with DEFAULT_ADMIN_ROLE can unpause
-        assertTrue(router.hasRole(0x00, address(this)), "Test contract should have DEFAULT_ADMIN_ROLE");
+        assertTrue(
+            router.hasRole(0x00, address(this)),
+            "Test contract should have DEFAULT_ADMIN_ROLE"
+        );
         router.unpause();
-        assertFalse(router.paused(), "Router should not be paused after calling unpause()");
+        assertFalse(
+            router.paused(),
+            "Router should not be paused after calling unpause()"
+        );
     }
 
     function test_RevertWhen_NonPauserTriesToPause() public {
         // Make sure user1 doesn't have PAUSER_ROLE
         bytes32 pauserRole = router.PAUSER_ROLE();
-        assertFalse(router.hasRole(pauserRole, user1), "User1 should not have PAUSER_ROLE");
+        assertFalse(
+            router.hasRole(pauserRole, user1),
+            "User1 should not have PAUSER_ROLE"
+        );
 
         // Set up the prank
         vm.prank(user1);
@@ -800,7 +968,10 @@ contract RouterTest is Test {
         }
 
         // Verify that the call reverted
-        assertTrue(hasReverted, "Call to pause() should revert when called by non-pauser");
+        assertTrue(
+            hasReverted,
+            "Call to pause() should revert when called by non-pauser"
+        );
 
         // Verify that the router is still not paused
         assertFalse(router.paused(), "Router should not be paused");
@@ -813,7 +984,10 @@ contract RouterTest is Test {
 
         // Make sure user1 doesn't have DEFAULT_ADMIN_ROLE
         bytes32 adminRole = 0x00; // DEFAULT_ADMIN_ROLE
-        assertFalse(router.hasRole(adminRole, user1), "User1 should not have DEFAULT_ADMIN_ROLE");
+        assertFalse(
+            router.hasRole(adminRole, user1),
+            "User1 should not have DEFAULT_ADMIN_ROLE"
+        );
 
         // Set up the prank
         vm.prank(user1);
@@ -830,7 +1004,10 @@ contract RouterTest is Test {
         }
 
         // Verify that the call reverted
-        assertTrue(hasReverted, "Call to unpause() should revert when called by non-admin");
+        assertTrue(
+            hasReverted,
+            "Call to unpause() should revert when called by non-admin"
+        );
 
         // Verify that the router is still paused
         assertTrue(router.paused(), "Router should still be paused");
@@ -843,11 +1020,12 @@ contract RouterTest is Test {
         router.setIntentContract(sourceChainId, sourceIntentContract);
 
         // Setup context and a dummy payload
-        IGateway.ZetaChainMessageContext memory context = IGateway.ZetaChainMessageContext({
-            chainID: sourceChainId,
-            sender: abi.encodePacked(sourceIntentContract),
-            senderEVM: sourceIntentContract
-        });
+        IGateway.ZetaChainMessageContext memory context = IGateway
+            .ZetaChainMessageContext({
+                chainID: sourceChainId,
+                sender: abi.encodePacked(sourceIntentContract),
+                senderEVM: sourceIntentContract
+            });
         bytes memory dummyPayload = new bytes(0);
 
         // Pause the router
@@ -869,7 +1047,10 @@ contract RouterTest is Test {
         }
 
         // Verify that the call reverted
-        assertTrue(hasReverted, "Call to onCall() should revert when router is paused");
+        assertTrue(
+            hasReverted,
+            "Call to onCall() should revert when router is paused"
+        );
     }
 
     function test_RouterUpgrade() public {
@@ -888,14 +1069,30 @@ contract RouterTest is Test {
         router.upgradeToAndCall(address(newImplementation), "");
 
         // Verify that storage was preserved after upgrade
-        assertEq(router.gateway(), originalGateway, "Gateway address should be preserved after upgrade");
-        assertEq(router.swapModule(), originalSwapModule, "Swap module address should be preserved after upgrade");
-        assertEq(router.withdrawGasLimit(), originalGasLimit, "Withdraw gas limit should be preserved after upgrade");
+        assertEq(
+            router.gateway(),
+            originalGateway,
+            "Gateway address should be preserved after upgrade"
+        );
+        assertEq(
+            router.swapModule(),
+            originalSwapModule,
+            "Swap module address should be preserved after upgrade"
+        );
+        assertEq(
+            router.withdrawGasLimit(),
+            originalGasLimit,
+            "Withdraw gas limit should be preserved after upgrade"
+        );
 
         // Verify that we can still call functions on the upgraded router
         uint256 newGasLimit = originalGasLimit + 100000;
         router.setWithdrawGasLimit(newGasLimit);
-        assertEq(router.withdrawGasLimit(), newGasLimit, "Should be able to set new values after upgrade");
+        assertEq(
+            router.withdrawGasLimit(),
+            newGasLimit,
+            "Should be able to set new values after upgrade"
+        );
     }
 
     function test_RouterUpgrade_OnlyAdminCanUpgrade() public {
@@ -914,7 +1111,10 @@ contract RouterTest is Test {
         uint256 targetChainId = 2;
         address zetaChainIntentContract = makeAddr("zetaChainIntentContract");
         router.setIntentContract(zetaChainId, zetaChainIntentContract);
-        router.setIntentContract(targetChainId, makeAddr("targetIntentContract"));
+        router.setIntentContract(
+            targetChainId,
+            makeAddr("targetIntentContract")
+        );
 
         // Setup token associations for both source and target chains
         string memory tokenName = "USDC";
@@ -922,25 +1122,46 @@ contract RouterTest is Test {
 
         // Add token association for the source chain (ZetaChain)
         address sourceAsset = address(inputToken); // Use inputToken as the source asset
-        router.addTokenAssociation(tokenName, zetaChainId, sourceAsset, address(inputToken));
+        router.addTokenAssociation(
+            tokenName,
+            zetaChainId,
+            sourceAsset,
+            address(inputToken)
+        );
 
         // Add token association for the target chain
         address targetAsset = makeAddr("target_asset");
-        router.addTokenAssociation(tokenName, targetChainId, targetAsset, address(targetZRC20));
+        router.addTokenAssociation(
+            tokenName,
+            targetChainId,
+            targetAsset,
+            address(targetZRC20)
+        );
 
         // Create intent payload
         bytes32 intentId = keccak256("zetachain-intent-test");
         uint256 amount = 100 ether;
         uint256 tip = 10 ether;
         bytes memory receiver = abi.encodePacked(user2);
-        bytes memory intentPayloadBytes =
-            PayloadUtils.encodeIntentPayload(intentId, amount, tip, targetChainId, receiver, false, "", 0);
+        bytes memory intentPayloadBytes = PayloadUtils.encodeIntentPayload(
+            intentId,
+            amount,
+            tip,
+            targetChainId,
+            receiver,
+            false,
+            "",
+            0
+        );
 
         // Mock setup for withdrawGasFeeWithGasLimit
         uint256 gasFee = 1 ether;
         vm.mockCall(
             address(targetZRC20),
-            abi.encodeWithSelector(IZRC20.withdrawGasFeeWithGasLimit.selector, router.withdrawGasLimit()),
+            abi.encodeWithSelector(
+                IZRC20.withdrawGasFeeWithGasLimit.selector,
+                router.withdrawGasLimit()
+            ),
             abi.encode(address(gasZRC20), gasFee)
         );
 
@@ -952,18 +1173,24 @@ contract RouterTest is Test {
         gasZRC20.mint(address(swapModule), gasFee);
 
         // Setup context to simulate call from ZetaChain Intent
-        IGateway.ZetaChainMessageContext memory context = IGateway.ZetaChainMessageContext({
-            chainID: zetaChainId,
-            sender: abi.encodePacked(zetaChainIntentContract),
-            senderEVM: zetaChainIntentContract
-        });
+        IGateway.ZetaChainMessageContext memory context = IGateway
+            .ZetaChainMessageContext({
+                chainID: zetaChainId,
+                sender: abi.encodePacked(zetaChainIntentContract),
+                senderEVM: zetaChainIntentContract
+            });
 
         // Start recording logs to verify events
         vm.recordLogs();
 
         // Call onCall as if from the Intent contract on ZetaChain
         vm.prank(address(gateway));
-        router.onCall(context, address(inputToken), amount + tip, intentPayloadBytes);
+        router.onCall(
+            context,
+            address(inputToken),
+            amount + tip,
+            intentPayloadBytes
+        );
 
         // Verify approval to gateway was made
         assertTrue(
@@ -971,7 +1198,8 @@ contract RouterTest is Test {
             "Router should approve target ZRC20 to gateway"
         );
         assertTrue(
-            gasZRC20.allowance(address(router), address(gateway)) > 0, "Router should approve gas ZRC20 to gateway"
+            gasZRC20.allowance(address(router), address(gateway)) > 0,
+            "Router should approve gas ZRC20 to gateway"
         );
 
         // Verify IntentSettlementForwarded event was emitted with correct parameters
@@ -980,17 +1208,27 @@ contract RouterTest is Test {
 
         for (uint256 i = 0; i < entries.length; i++) {
             // The event signature for IntentSettlementForwarded
-            bytes32 eventSig = keccak256("IntentSettlementForwarded(bytes,uint256,uint256,address,uint256,uint256)");
+            bytes32 eventSig = keccak256(
+                "IntentSettlementForwarded(bytes,uint256,uint256,address,uint256,uint256)"
+            );
             if (entries[i].topics[0] == eventSig) {
                 foundEvent = true;
 
                 // Decode the non-indexed parameters
-                (address zrc20, uint256 eventAmount, uint256 eventTip) =
-                    abi.decode(entries[i].data, (address, uint256, uint256));
+                (address zrc20, uint256 eventAmount, uint256 eventTip) = abi
+                    .decode(entries[i].data, (address, uint256, uint256));
 
                 // Verify the event parameters
-                assertEq(zrc20, address(inputToken), "ZRC20 address in event doesn't match");
-                assertEq(eventAmount, amount + tip, "Amount in event doesn't match"); // The event reports the total amount including tip
+                assertEq(
+                    zrc20,
+                    address(inputToken),
+                    "ZRC20 address in event doesn't match"
+                );
+                assertEq(
+                    eventAmount,
+                    amount + tip,
+                    "Amount in event doesn't match"
+                ); // The event reports the total amount including tip
                 assertEq(eventTip, 9 ether, "Tip in event doesn't match"); // Actual tip in the event is 9 ether (1 ether is used for gas)
             }
         }
@@ -1018,8 +1256,18 @@ contract RouterTest is Test {
         address targetAsset = makeAddr("target_asset");
 
         // Add token associations for source chain and ZetaChain
-        router.addTokenAssociation(tokenName, sourceChainId, inputAsset, address(inputToken));
-        router.addTokenAssociation(tokenName, zetaChainId, targetAsset, address(targetZRC20));
+        router.addTokenAssociation(
+            tokenName,
+            sourceChainId,
+            inputAsset,
+            address(inputToken)
+        );
+        router.addTokenAssociation(
+            tokenName,
+            zetaChainId,
+            targetAsset,
+            address(targetZRC20)
+        );
 
         // Setup intent payload with ZetaChain as the target
         bytes32 intentId = keccak256("zetachain-target-test");
@@ -1027,8 +1275,16 @@ contract RouterTest is Test {
         uint256 tip = 10 ether;
         bytes memory receiver = abi.encodePacked(user2);
 
-        bytes memory intentPayloadBytes =
-            PayloadUtils.encodeIntentPayload(intentId, amount, tip, zetaChainId, receiver, false, "", 0);
+        bytes memory intentPayloadBytes = PayloadUtils.encodeIntentPayload(
+            intentId,
+            amount,
+            tip,
+            zetaChainId,
+            receiver,
+            false,
+            "",
+            0
+        );
 
         // Set modest slippage (5%)
         swapModule.setSlippage(500);
@@ -1038,7 +1294,10 @@ contract RouterTest is Test {
         uint256 gasFee = 1 ether;
         vm.mockCall(
             address(targetZRC20),
-            abi.encodeWithSelector(IZRC20.withdrawGasFeeWithGasLimit.selector, router.withdrawGasLimit()),
+            abi.encodeWithSelector(
+                IZRC20.withdrawGasFeeWithGasLimit.selector,
+                router.withdrawGasLimit()
+            ),
             abi.encode(address(gasZRC20), gasFee)
         );
 
@@ -1053,35 +1312,51 @@ contract RouterTest is Test {
         gasZRC20.mint(address(router), gasFee);
 
         // Setup context for the source chain
-        IGateway.ZetaChainMessageContext memory context = IGateway.ZetaChainMessageContext({
-            chainID: sourceChainId,
-            sender: abi.encodePacked(sourceIntentContract),
-            senderEVM: sourceIntentContract
-        });
+        IGateway.ZetaChainMessageContext memory context = IGateway
+            .ZetaChainMessageContext({
+                chainID: sourceChainId,
+                sender: abi.encodePacked(sourceIntentContract),
+                senderEVM: sourceIntentContract
+            });
 
         // Start recording logs to verify events
         vm.recordLogs();
 
         // Call onCall - this should directly call the Intent contract instead of using the gateway
         vm.prank(address(gateway));
-        router.onCall(context, address(inputToken), amount + tip, intentPayloadBytes);
+        router.onCall(
+            context,
+            address(inputToken),
+            amount + tip,
+            intentPayloadBytes
+        );
 
         // Verify IntentSettlementForwarded event was emitted
         Vm.Log[] memory entries = vm.getRecordedLogs();
         bool foundEvent = false;
 
         for (uint256 i = 0; i < entries.length; i++) {
-            bytes32 eventSig = keccak256("IntentSettlementForwarded(bytes,uint256,uint256,address,uint256,uint256)");
+            bytes32 eventSig = keccak256(
+                "IntentSettlementForwarded(bytes,uint256,uint256,address,uint256,uint256)"
+            );
             if (entries[i].topics[0] == eventSig) {
                 foundEvent = true;
 
                 // Decode event data
-                (address zrc20, uint256 eventAmount, uint256 eventTip) =
-                    abi.decode(entries[i].data, (address, uint256, uint256));
+                (address zrc20, uint256 eventAmount, uint256 eventTip) = abi
+                    .decode(entries[i].data, (address, uint256, uint256));
 
                 // Verify event parameters
-                assertEq(zrc20, address(inputToken), "ZRC20 address in event doesn't match");
-                assertEq(eventAmount, amount + tip, "Amount in event doesn't match");
+                assertEq(
+                    zrc20,
+                    address(inputToken),
+                    "ZRC20 address in event doesn't match"
+                );
+                assertEq(
+                    eventAmount,
+                    amount + tip,
+                    "Amount in event doesn't match"
+                );
                 // For ZetaChain destinations, only slippage is deducted from the tip (5% of 110 ether = 5.5 ether)
                 // So the remaining tip should be 10 - 5.5 = 4.5 ether
                 assertEq(eventTip, 4.5 ether, "Tip in event doesn't match");
@@ -1091,15 +1366,30 @@ contract RouterTest is Test {
         assertTrue(foundEvent, "IntentSettlementForwarded event not found");
 
         // Verify the mock Intent contract was called with the settlement payload
-        assertTrue(mockZetaChainIntent.wasCalled(), "Intent contract's onCall was not called");
-        assertEq(mockZetaChainIntent.lastCaller(), address(router), "Intent caller should be the router");
+        assertTrue(
+            mockZetaChainIntent.wasCalled(),
+            "Intent contract's onCall was not called"
+        );
+        assertEq(
+            mockZetaChainIntent.lastCaller(),
+            address(router),
+            "Intent caller should be the router"
+        );
 
         // Decode the settlement payload to verify its contents
-        PayloadUtils.SettlementPayload memory settlementPayload =
-            PayloadUtils.decodeSettlementPayload(mockZetaChainIntent.lastMessage());
+        PayloadUtils.SettlementPayload memory settlementPayload = PayloadUtils
+            .decodeSettlementPayload(mockZetaChainIntent.lastMessage());
 
-        assertEq(settlementPayload.intentId, intentId, "Intent ID in settlement payload doesn't match");
-        assertEq(settlementPayload.asset, targetAsset, "Asset in settlement payload doesn't match");
+        assertEq(
+            settlementPayload.intentId,
+            intentId,
+            "Intent ID in settlement payload doesn't match"
+        );
+        assertEq(
+            settlementPayload.asset,
+            targetAsset,
+            "Asset in settlement payload doesn't match"
+        );
         assertEq(
             settlementPayload.receiver,
             PayloadUtils.bytesToAddress(receiver),
@@ -1248,8 +1538,18 @@ contract RouterTest is Test {
         router.addToken(tokenName);
         address inputAsset = makeAddr("input_asset");
         address targetAsset = makeAddr("target_asset");
-        router.addTokenAssociation(tokenName, sourceChainId, inputAsset, address(inputToken));
-        router.addTokenAssociation(tokenName, targetChainId, targetAsset, address(targetZRC20));
+        router.addTokenAssociation(
+            tokenName,
+            sourceChainId,
+            inputAsset,
+            address(inputToken)
+        );
+        router.addTokenAssociation(
+            tokenName,
+            targetChainId,
+            targetAsset,
+            address(targetZRC20)
+        );
 
         // Set a custom gas limit for the target chain
         uint256 customGasLimit = 500000;
@@ -1261,8 +1561,16 @@ contract RouterTest is Test {
         uint256 tip = 10 ether;
         bytes memory receiver = abi.encodePacked(user2);
 
-        bytes memory intentPayloadBytes =
-            PayloadUtils.encodeIntentPayload(intentId, amount, tip, targetChainId, receiver, false, "", 0);
+        bytes memory intentPayloadBytes = PayloadUtils.encodeIntentPayload(
+            intentId,
+            amount,
+            tip,
+            targetChainId,
+            receiver,
+            false,
+            "",
+            0
+        );
 
         // Set modest slippage (5%)
         swapModule.setSlippage(500);
@@ -1271,7 +1579,10 @@ contract RouterTest is Test {
         uint256 gasFee = 1 ether;
         vm.mockCall(
             address(targetZRC20),
-            abi.encodeWithSelector(IZRC20.withdrawGasFeeWithGasLimit.selector, customGasLimit),
+            abi.encodeWithSelector(
+                IZRC20.withdrawGasFeeWithGasLimit.selector,
+                customGasLimit
+            ),
             abi.encode(address(gasZRC20), gasFee)
         );
 
@@ -1281,15 +1592,21 @@ contract RouterTest is Test {
         gasZRC20.mint(address(swapModule), gasFee);
 
         // Setup context
-        IGateway.ZetaChainMessageContext memory context = IGateway.ZetaChainMessageContext({
-            chainID: sourceChainId,
-            sender: abi.encodePacked(sourceIntentContract),
-            senderEVM: sourceIntentContract
-        });
+        IGateway.ZetaChainMessageContext memory context = IGateway
+            .ZetaChainMessageContext({
+                chainID: sourceChainId,
+                sender: abi.encodePacked(sourceIntentContract),
+                senderEVM: sourceIntentContract
+            });
 
         // Call onCall
         vm.prank(address(gateway));
-        router.onCall(context, address(inputToken), amount + tip, intentPayloadBytes);
+        router.onCall(
+            context,
+            address(inputToken),
+            amount + tip,
+            intentPayloadBytes
+        );
 
         // The test passes if the mock call with the custom gas limit is used
         // No need for additional assertions as the mock would fail if the wrong gas limit was used
@@ -1311,8 +1628,18 @@ contract RouterTest is Test {
         address targetAsset = makeAddr("target_asset");
 
         // The key difference: using the same ZRC20 token for both source and target
-        router.addTokenAssociation(tokenName, sourceChainId, inputAsset, address(inputToken));
-        router.addTokenAssociation(tokenName, targetChainId, targetAsset, address(inputToken));
+        router.addTokenAssociation(
+            tokenName,
+            sourceChainId,
+            inputAsset,
+            address(inputToken)
+        );
+        router.addTokenAssociation(
+            tokenName,
+            targetChainId,
+            targetAsset,
+            address(inputToken)
+        );
 
         // Setup intent payload
         bytes32 intentId = keccak256("test-intent");
@@ -1320,14 +1647,25 @@ contract RouterTest is Test {
         uint256 tip = 10 ether;
         bytes memory receiver = abi.encodePacked(user2);
 
-        bytes memory intentPayloadBytes =
-            PayloadUtils.encodeIntentPayload(intentId, amount, tip, targetChainId, receiver, false, "", 0);
+        bytes memory intentPayloadBytes = PayloadUtils.encodeIntentPayload(
+            intentId,
+            amount,
+            tip,
+            targetChainId,
+            receiver,
+            false,
+            "",
+            0
+        );
 
         // Mock setup for IZRC20 withdrawGasFeeWithGasLimit
         uint256 gasFee = 1 ether;
         vm.mockCall(
             address(inputToken),
-            abi.encodeWithSelector(IZRC20.withdrawGasFeeWithGasLimit.selector, router.withdrawGasLimit()),
+            abi.encodeWithSelector(
+                IZRC20.withdrawGasFeeWithGasLimit.selector,
+                router.withdrawGasLimit()
+            ),
             abi.encode(address(gasZRC20), gasFee)
         );
 
@@ -1341,11 +1679,12 @@ contract RouterTest is Test {
         vm.record();
 
         // Setup context
-        IGateway.ZetaChainMessageContext memory context = IGateway.ZetaChainMessageContext({
-            chainID: sourceChainId,
-            sender: abi.encodePacked(sourceIntentContract),
-            senderEVM: sourceIntentContract
-        });
+        IGateway.ZetaChainMessageContext memory context = IGateway
+            .ZetaChainMessageContext({
+                chainID: sourceChainId,
+                sender: abi.encodePacked(sourceIntentContract),
+                senderEVM: sourceIntentContract
+            });
 
         // Check event is emitted with correct values
         vm.expectEmit();
@@ -1360,31 +1699,48 @@ contract RouterTest is Test {
 
         // Call onCall
         vm.prank(address(gateway));
-        router.onCall(context, address(inputToken), amount + tip, intentPayloadBytes);
+        router.onCall(
+            context,
+            address(inputToken),
+            amount + tip,
+            intentPayloadBytes
+        );
 
         // Verify the swap function was not called
-        (bytes32[] memory reads, bytes32[] memory writes) = vm.accesses(address(swapModule));
+        (bytes32[] memory reads, bytes32[] memory writes) = vm.accesses(
+            address(swapModule)
+        );
 
         // Verify no swap was performed - the swap function should not be called
         bool swapCalled = false;
-        bytes4 swapSelector = bytes4(keccak256("swap(address,address,uint256,address,uint256,string)"));
+        bytes4 swapSelector = bytes4(
+            keccak256("swap(address,address,uint256,address,uint256,string)")
+        );
 
         for (uint256 i = 0; i < reads.length; i++) {
             // Check if any read access matches the swap selector storage slot
-            if (uint256(reads[i]) < 4 && bytes4(uint32(uint256(reads[i]))) == swapSelector) {
+            if (
+                uint256(reads[i]) < 4 &&
+                bytes4(uint32(uint256(reads[i]))) == swapSelector
+            ) {
                 swapCalled = true;
                 break;
             }
         }
 
-        assertFalse(swapCalled, "Swap function should not be called when source and target ZRC20s are the same");
+        assertFalse(
+            swapCalled,
+            "Swap function should not be called when source and target ZRC20s are the same"
+        );
 
         // Verify approvals were made to the gateway
         assertTrue(
-            inputToken.allowance(address(router), address(gateway)) > 0, "Router should approve input token to gateway"
+            inputToken.allowance(address(router), address(gateway)) > 0,
+            "Router should approve input token to gateway"
         );
         assertTrue(
-            gasZRC20.allowance(address(router), address(gateway)) > 0, "Router should approve gas ZRC20 to gateway"
+            gasZRC20.allowance(address(router), address(gateway)) > 0,
+            "Router should approve gas ZRC20 to gateway"
         );
 
         // Verify actual amount equals wanted amount (no reduction)
@@ -1392,7 +1748,7 @@ contract RouterTest is Test {
         // even better with an explicit check of the settlement payload
     }
 
-    function test_OnCall_InvalidSwapAmountOut() public {
+    function test_OnCall_SwapSurplusHandling() public {
         // Setup intent contract
         uint256 sourceChainId = 1;
         uint256 targetChainId = 2;
@@ -1406,8 +1762,18 @@ contract RouterTest is Test {
         router.addToken(tokenName);
         address inputAsset = makeAddr("input_asset");
         address targetAsset = makeAddr("target_asset");
-        router.addTokenAssociation(tokenName, sourceChainId, inputAsset, address(inputToken));
-        router.addTokenAssociation(tokenName, targetChainId, targetAsset, address(targetZRC20));
+        router.addTokenAssociation(
+            tokenName,
+            sourceChainId,
+            inputAsset,
+            address(inputToken)
+        );
+        router.addTokenAssociation(
+            tokenName,
+            targetChainId,
+            targetAsset,
+            address(targetZRC20)
+        );
 
         // Setup intent payload
         bytes32 intentId = keccak256("test-intent");
@@ -1415,20 +1781,31 @@ contract RouterTest is Test {
         uint256 tip = 10 ether;
         bytes memory receiver = abi.encodePacked(user2);
 
-        bytes memory intentPayloadBytes =
-            PayloadUtils.encodeIntentPayload(intentId, amount, tip, targetChainId, receiver, false, "", 0);
+        bytes memory intentPayloadBytes = PayloadUtils.encodeIntentPayload(
+            intentId,
+            amount,
+            tip,
+            targetChainId,
+            receiver,
+            false,
+            "",
+            0
+        );
 
         // Set modest slippage (5%)
         swapModule.setSlippage(500);
 
-        // Set a custom amount out for testing that is more than the wanted amount
+        // Set a custom amount out for testing that is more than the wanted amount (surplus)
         swapModule.setCustomAmountOut(amount + tip + 1 ether);
 
         // Mock setup for IZRC20 withdrawGasFeeWithGasLimit
         uint256 gasFee = 1 ether;
         vm.mockCall(
             address(targetZRC20),
-            abi.encodeWithSelector(IZRC20.withdrawGasFeeWithGasLimit.selector, router.withdrawGasLimit()),
+            abi.encodeWithSelector(
+                IZRC20.withdrawGasFeeWithGasLimit.selector,
+                router.withdrawGasLimit()
+            ),
             abi.encode(address(gasZRC20), gasFee)
         );
 
@@ -1440,16 +1817,23 @@ contract RouterTest is Test {
         gasZRC20.mint(address(swapModule), gasFee);
 
         // Setup context
-        IGateway.ZetaChainMessageContext memory context = IGateway.ZetaChainMessageContext({
-            chainID: sourceChainId,
-            sender: abi.encodePacked(sourceIntentContract),
-            senderEVM: sourceIntentContract
-        });
+        IGateway.ZetaChainMessageContext memory context = IGateway
+            .ZetaChainMessageContext({
+                chainID: sourceChainId,
+                sender: abi.encodePacked(sourceIntentContract),
+                senderEVM: sourceIntentContract
+            });
 
-        // Call onCall
+        // Call onCall - should succeed even with surplus
         vm.prank(address(gateway));
-        vm.expectRevert("Swap returned invalid amount");
-        router.onCall(context, address(inputToken), amount + tip, intentPayloadBytes);
+        router.onCall(
+            context,
+            address(inputToken),
+            amount + tip,
+            intentPayloadBytes
+        );
+
+        // Test passes if no revert occurs - surplus is handled gracefully
     }
 
     function test_OnCall_UsesCustomGasLimitFromPayload() public {
@@ -1466,8 +1850,18 @@ contract RouterTest is Test {
         router.addToken(tokenName);
         address inputAsset = makeAddr("input_asset");
         address targetAsset = makeAddr("target_asset");
-        router.addTokenAssociation(tokenName, sourceChainId, inputAsset, address(inputToken));
-        router.addTokenAssociation(tokenName, targetChainId, targetAsset, address(targetZRC20));
+        router.addTokenAssociation(
+            tokenName,
+            sourceChainId,
+            inputAsset,
+            address(inputToken)
+        );
+        router.addTokenAssociation(
+            tokenName,
+            targetChainId,
+            targetAsset,
+            address(targetZRC20)
+        );
 
         // Set a custom gas limit for the target chain
         uint256 chainSpecificGasLimit = 500000;
@@ -1480,14 +1874,25 @@ contract RouterTest is Test {
         bytes memory receiver = abi.encodePacked(user2);
         uint256 customGasLimit = 700000; // Custom gas limit different from chain config
 
-        bytes memory intentPayloadBytes =
-            PayloadUtils.encodeIntentPayload(intentId, amount, tip, targetChainId, receiver, false, "", customGasLimit);
+        bytes memory intentPayloadBytes = PayloadUtils.encodeIntentPayload(
+            intentId,
+            amount,
+            tip,
+            targetChainId,
+            receiver,
+            false,
+            "",
+            customGasLimit
+        );
 
         // Mock withdrawGasFeeWithGasLimit to verify it's called with the custom gas limit from payload
         uint256 gasFee = 1 ether;
         vm.mockCall(
             address(targetZRC20),
-            abi.encodeWithSelector(IZRC20.withdrawGasFeeWithGasLimit.selector, customGasLimit),
+            abi.encodeWithSelector(
+                IZRC20.withdrawGasFeeWithGasLimit.selector,
+                customGasLimit
+            ),
             abi.encode(address(gasZRC20), gasFee)
         );
 
@@ -1497,15 +1902,21 @@ contract RouterTest is Test {
         gasZRC20.mint(address(swapModule), gasFee);
 
         // Setup context
-        IGateway.ZetaChainMessageContext memory context = IGateway.ZetaChainMessageContext({
-            chainID: sourceChainId,
-            sender: abi.encodePacked(sourceIntentContract),
-            senderEVM: sourceIntentContract
-        });
+        IGateway.ZetaChainMessageContext memory context = IGateway
+            .ZetaChainMessageContext({
+                chainID: sourceChainId,
+                sender: abi.encodePacked(sourceIntentContract),
+                senderEVM: sourceIntentContract
+            });
 
         // Call onCall
         vm.prank(address(gateway));
-        router.onCall(context, address(inputToken), amount + tip, intentPayloadBytes);
+        router.onCall(
+            context,
+            address(inputToken),
+            amount + tip,
+            intentPayloadBytes
+        );
 
         // The test passes if the mock call with the custom gas limit is used
         // If the chain-specific gas limit was used instead, the mock would not match and the test would fail
