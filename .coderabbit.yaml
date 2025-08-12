@@ -1,0 +1,65 @@
+# https://docs.coderabbit.ai/guides/configure-coderabbit
+language: "en-US"
+early_access: false
+chat: { auto_reply: true }
+tone_instructions: >-
+  Maintain a formal tone, highlighting issues, and suggesting production-grade, elegant, and concise solutions.
+
+reviews:
+  profile: chill
+  high_level_summary: true
+
+  poem: false
+
+  collapse_walkthrough: true
+  sequence_diagrams: true
+
+  path_filters:
+    - "**/*"
+    - "!**/out/**"
+    - "!**/cache/**"
+    - "!**/artifacts/**"
+    - "!**/node_modules/**"
+    - "!**/lib/**"
+    - "!**/broadcast/**"
+    - "!**/*.json"
+    - "!**/coverage/**"
+    - "!**/lcov.info"
+
+  path_instructions:
+    - path: '**/*.sol'
+      instructions: >-
+        Review the Solidity smart contract code, focusing on security vulnerabilities,
+        gas optimization, best practices, and potential reentrancy issues. Check for
+        proper access controls, input validation, and adherence to established patterns
+        like CEI (Checks-Effects-Interactions).
+    - path: '**/test/**/*.sol'
+      instructions: >-
+        Review the Solidity test files, ensuring comprehensive test coverage,
+        proper edge case handling, and correct use of Foundry testing patterns.
+        Check for proper setup, teardown, and assertion patterns.
+    - path: '**/script/**/*.sol'
+      instructions: >-
+        Review the Foundry deployment and interaction scripts, focusing on
+        proper error handling, security considerations, and deployment safety.
+        Ensure scripts are idempotent and handle network-specific configurations.
+    - path: '**/*.sh'
+      instructions: >-
+        Review the shell scripts, point out issues relative to security,
+        performance, and maintainability.
+    - path: '**/foundry.toml'
+      instructions: >-
+        Review the Foundry configuration, checking for appropriate compiler
+        settings, optimization levels, and project structure configuration.
+
+  auto_review:
+    drafts: false
+    # disables review for new commits
+    auto_incremental_review: false
+    base_branches:
+      - main
+
+  tools:
+    languagetool:
+      enabled: true
+      level: default
