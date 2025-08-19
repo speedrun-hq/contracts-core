@@ -29,25 +29,39 @@ contract MockSwapModule is ISwap {
         // Transfer tokens from sender to this contract
         IERC20(tokenIn).transferFrom(msg.sender, address(this), amountIn);
 
-        // Calculate amount out based on slippage settings
-        uint256 slippageCost = (amountIn * slippage) / 10000; // slippage in basis points (e.g., 100 = 1%)
+        // Handle gas fee first (similar to SwapAlgebra)
+        uint256 amountInForMainSwap = amountIn;
 
-        // Only account for gas fee if gasZRC20 is provided
-        uint256 totalCost = slippageCost;
-        if (gasZRC20 != address(0)) {
-            totalCost += gasFee;
+        if (gasFee > 0 && gasZRC20 != address(0)) {
+            // If tokenIn is not the gas token, we need to account for gas fee
+            if (tokenIn != gasZRC20) {
+                // In mock, we just reduce the main swap amount by gas fee
+                amountInForMainSwap = amountIn - gasFee;
+            } else {
+                // If tokenIn is already the gas token, just set aside the needed amount
+                amountInForMainSwap = amountIn - gasFee;
+            }
+
+            // Transfer gas fee tokens back to the sender
+            IERC20(gasZRC20).transfer(msg.sender, gasFee);
         }
 
-        require(amountIn > totalCost, "Amount insufficient to cover costs after tip");
+        // Handle main swap
+        if (amountInForMainSwap > 0) {
+            // Check if input and output tokens are the same
+            if (tokenIn == tokenOut) {
+                // No swap needed, just return the remaining amount
+                amountOut = amountInForMainSwap;
+            } else {
+                // Calculate amount out based on slippage settings
+                uint256 slippageCost = (amountInForMainSwap * slippage) / 10000; // slippage in basis points (e.g., 100 = 1%)
+                amountOut = amountInForMainSwap - slippageCost;
+            }
 
-        amountOut = amountIn - totalCost;
-
-        // Transfer tokens back to the sender
-        IERC20(tokenOut).transfer(msg.sender, amountOut);
-
-        // Only transfer gas fee if gasZRC20 is not zero address
-        if (gasZRC20 != address(0) && gasFee > 0) {
-            IERC20(gasZRC20).transfer(msg.sender, gasFee);
+            // Transfer tokens back to the sender
+            IERC20(tokenOut).transfer(msg.sender, amountOut);
+        } else {
+            amountOut = 0;
         }
 
         // Allow to set a custom amount out for testing
@@ -68,25 +82,39 @@ contract MockSwapModule is ISwap {
         // Transfer tokens from sender to this contract
         IERC20(tokenIn).transferFrom(msg.sender, address(this), amountIn);
 
-        // Calculate amount out based on slippage settings
-        uint256 slippageCost = (amountIn * slippage) / 10000; // slippage in basis points (e.g., 100 = 1%)
+        // Handle gas fee first (similar to SwapAlgebra)
+        uint256 amountInForMainSwap = amountIn;
 
-        // Only account for gas fee if gasZRC20 is provided
-        uint256 totalCost = slippageCost;
-        if (gasZRC20 != address(0)) {
-            totalCost += gasFee;
+        if (gasFee > 0 && gasZRC20 != address(0)) {
+            // If tokenIn is not the gas token, we need to account for gas fee
+            if (tokenIn != gasZRC20) {
+                // In mock, we just reduce the main swap amount by gas fee
+                amountInForMainSwap = amountIn - gasFee;
+            } else {
+                // If tokenIn is already the gas token, just set aside the needed amount
+                amountInForMainSwap = amountIn - gasFee;
+            }
+
+            // Transfer gas fee tokens back to the sender
+            IERC20(gasZRC20).transfer(msg.sender, gasFee);
         }
 
-        require(amountIn > totalCost, "Amount insufficient to cover costs after tip");
+        // Handle main swap
+        if (amountInForMainSwap > 0) {
+            // Check if input and output tokens are the same
+            if (tokenIn == tokenOut) {
+                // No swap needed, just return the remaining amount
+                amountOut = amountInForMainSwap;
+            } else {
+                // Calculate amount out based on slippage settings
+                uint256 slippageCost = (amountInForMainSwap * slippage) / 10000; // slippage in basis points (e.g., 100 = 1%)
+                amountOut = amountInForMainSwap - slippageCost;
+            }
 
-        amountOut = amountIn - totalCost;
-
-        // Transfer tokens back to the sender
-        IERC20(tokenOut).transfer(msg.sender, amountOut);
-
-        // Only transfer gas fee if gasZRC20 is not zero address
-        if (gasZRC20 != address(0) && gasFee > 0) {
-            IERC20(gasZRC20).transfer(msg.sender, gasFee);
+            // Transfer tokens back to the sender
+            IERC20(tokenOut).transfer(msg.sender, amountOut);
+        } else {
+            amountOut = 0;
         }
 
         // Allow to set a custom amount out for testing

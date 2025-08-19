@@ -227,47 +227,54 @@ contract SwapAlgebra is ISwap, Ownable {
 
         // Now perform the main swap using Algebra pool for the remaining amount
         if (amountInForMainSwap > 0) {
-            // Check if a direct pool exists
-            bool directPoolExists = algebraPoolExists(tokenIn, tokenOut);
-
-            if (directPoolExists) {
-                // Swap directly using the Algebra pool
-                amountOut = swapThroughAlgebraPool(tokenIn, tokenOut, amountInForMainSwap);
+            // Check if input and output tokens are the same
+            if (tokenIn == tokenOut) {
+                // No swap needed, just transfer the remaining amount back to sender
+                amountOut = amountInForMainSwap;
+                IERC20(tokenOut).safeTransfer(msg.sender, amountOut);
             } else {
-                // Get the intermediary token for this token name
-                address intermediaryToken = intermediaryTokens[tokenName];
-                require(intermediaryToken != address(0), "No intermediary token set for this token name");
+                // Check if a direct pool exists
+                bool directPoolExists = algebraPoolExists(tokenIn, tokenOut);
 
-                // Check if both pools exist
-                bool poolInToInterExists = algebraPoolExists(tokenIn, intermediaryToken);
-                bool poolInterToOutExists = algebraPoolExists(intermediaryToken, tokenOut);
+                if (directPoolExists) {
+                    // Swap directly using the Algebra pool
+                    amountOut = swapThroughAlgebraPool(tokenIn, tokenOut, amountInForMainSwap);
+                } else {
+                    // Get the intermediary token for this token name
+                    address intermediaryToken = intermediaryTokens[tokenName];
+                    require(intermediaryToken != address(0), "No intermediary token set for this token name");
 
-                require(poolInToInterExists && poolInterToOutExists, "Required Algebra pools do not exist");
+                    // Check if both pools exist
+                    bool poolInToInterExists = algebraPoolExists(tokenIn, intermediaryToken);
+                    bool poolInterToOutExists = algebraPoolExists(intermediaryToken, tokenOut);
 
-                // First hop: tokenIn -> intermediaryToken
-                uint256 intermediaryAmount = swapThroughAlgebraPool(tokenIn, intermediaryToken, amountInForMainSwap);
+                    require(poolInToInterExists && poolInterToOutExists, "Required Algebra pools do not exist");
 
-                // Second hop: intermediaryToken -> tokenOut
-                amountOut = swapThroughAlgebraPool(intermediaryToken, tokenOut, intermediaryAmount);
+                    // First hop: tokenIn -> intermediaryToken
+                    uint256 intermediaryAmount = swapThroughAlgebraPool(tokenIn, intermediaryToken, amountInForMainSwap);
 
-                emit SwapWithIntermediary(tokenIn, intermediaryToken, tokenOut, amountInForMainSwap, amountOut);
+                    // Second hop: intermediaryToken -> tokenOut
+                    amountOut = swapThroughAlgebraPool(intermediaryToken, tokenOut, intermediaryAmount);
+
+                    emit SwapWithIntermediary(tokenIn, intermediaryToken, tokenOut, amountInForMainSwap, amountOut);
+                }
+
+                // Calculate actual balance change to account for any existing balance
+                uint256 finalOutBalance = IERC20(tokenOut).balanceOf(address(this));
+                uint256 actualAmountOut = finalOutBalance - initialOutBalance;
+
+                // Apply slippage check using constant MAX_SLIPPAGE (1%)
+                uint256 minRequiredAmount = calculateMinAmountOutWithSlippage(amountOut);
+
+                // Verify we received at least the minimum amount expected
+                require(actualAmountOut >= minRequiredAmount, "Slippage tolerance exceeded");
+
+                // Transfer output tokens to sender
+                IERC20(tokenOut).safeTransfer(msg.sender, actualAmountOut);
+
+                // Update the return value to match what was actually received and transferred
+                amountOut = actualAmountOut;
             }
-
-            // Calculate actual balance change to account for any existing balance
-            uint256 finalOutBalance = IERC20(tokenOut).balanceOf(address(this));
-            uint256 actualAmountOut = finalOutBalance - initialOutBalance;
-
-            // Apply slippage check using constant MAX_SLIPPAGE (1%)
-            uint256 minRequiredAmount = calculateMinAmountOutWithSlippage(amountOut);
-
-            // Verify we received at least the minimum amount expected
-            require(actualAmountOut >= minRequiredAmount, "Slippage tolerance exceeded");
-
-            // Transfer output tokens to sender
-            IERC20(tokenOut).safeTransfer(msg.sender, actualAmountOut);
-
-            // Update the return value to match what was actually received and transferred
-            amountOut = actualAmountOut;
         }
 
         return amountOut;
