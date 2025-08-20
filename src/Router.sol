@@ -369,48 +369,42 @@ contract Router is
 
         settlementInfo.actualAmount = settlementInfo.wantedAmount;
 
-        // Check if source and target ZRC20 are the same
-        if (intentInfo.zrc20 == settlementInfo.targetZRC20) {
-            // No swap needed, use original amounts
-            settlementInfo.amountWithTipOut = intentInfo.amountWithTip;
-            settlementInfo.tipAfterSwap = wantedTip;
+        // Always call swap module to handle gas fees and potential swaps
+        // Approve swap module to spend tokens
+        IERC20(intentInfo.zrc20).approve(swapModule, 0);
+        IERC20(intentInfo.zrc20).approve(swapModule, intentInfo.amountWithTip);
+
+        // Perform swap through swap module
+        settlementInfo.amountWithTipOut = ISwap(swapModule).swap(
+            intentInfo.zrc20,
+            settlementInfo.targetZRC20,
+            intentInfo.amountWithTip,
+            settlementInfo.gasZRC20,
+            settlementInfo.gasFee,
+            zrc20ToTokenName[intentInfo.zrc20]
+        );
+
+        // Calculate slippage difference and adjust tip accordingly
+        // If swap returns more than expected (surplus), slippageAndFeeCost will be 0
+        // Note: Surplus amounts are currently ignored as they are too small to handle
+        // This will be addressed in future updates
+        uint256 slippageAndFeeCost = wantedAmountWithTip > settlementInfo.amountWithTipOut
+            ? wantedAmountWithTip - settlementInfo.amountWithTipOut
+            : 0;
+
+        // Check if tip covers the slippage and fee costs
+        if (wantedTip > slippageAndFeeCost) {
+            // Tip covers all costs, subtract from tip only
+            settlementInfo.tipAfterSwap = wantedTip - slippageAndFeeCost;
         } else {
-            // Approve swap module to spend tokens
-            IERC20(intentInfo.zrc20).approve(swapModule, 0);
-            IERC20(intentInfo.zrc20).approve(swapModule, intentInfo.amountWithTip);
-
-            // Perform swap through swap module
-            settlementInfo.amountWithTipOut = ISwap(swapModule).swap(
-                intentInfo.zrc20,
-                settlementInfo.targetZRC20,
-                intentInfo.amountWithTip,
-                settlementInfo.gasZRC20,
-                settlementInfo.gasFee,
-                zrc20ToTokenName[intentInfo.zrc20]
-            );
-
-            // Calculate slippage difference and adjust tip accordingly
-            // If swap returns more than expected (surplus), slippageAndFeeCost will be 0
-            // Note: Surplus amounts are currently ignored as they are too small to handle
-            // This will be addressed in future updates
-            uint256 slippageAndFeeCost = wantedAmountWithTip > settlementInfo.amountWithTipOut
-                ? wantedAmountWithTip - settlementInfo.amountWithTipOut
-                : 0;
-
-            // Check if tip covers the slippage and fee costs
-            if (wantedTip > slippageAndFeeCost) {
-                // Tip covers all costs, subtract from tip only
-                settlementInfo.tipAfterSwap = wantedTip - slippageAndFeeCost;
-            } else {
-                // Tip doesn't cover costs, use it all and reduce the amount
-                settlementInfo.tipAfterSwap = 0;
-                // Calculate how much remaining slippage to cover from the amount
-                uint256 remainingCost = slippageAndFeeCost - wantedTip;
-                // Ensure the amount is greater than the remaining cost, otherwise fail
-                require(settlementInfo.wantedAmount > remainingCost, "Amount insufficient to cover costs after tip");
-                // Reduce the actual amount by the remaining cost
-                settlementInfo.actualAmount = settlementInfo.wantedAmount - remainingCost;
-            }
+            // Tip doesn't cover costs, use it all and reduce the amount
+            settlementInfo.tipAfterSwap = 0;
+            // Calculate how much remaining slippage to cover from the amount
+            uint256 remainingCost = slippageAndFeeCost - wantedTip;
+            // Ensure the amount is greater than the remaining cost, otherwise fail
+            require(settlementInfo.wantedAmount > remainingCost, "Amount insufficient to cover costs after tip");
+            // Reduce the actual amount by the remaining cost
+            settlementInfo.actualAmount = settlementInfo.wantedAmount - remainingCost;
         }
 
         return settlementInfo;

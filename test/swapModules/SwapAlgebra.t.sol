@@ -516,7 +516,7 @@ contract SwapAlgebraTest is Test {
         uint256 expectedAmount = 1000 ether;
 
         // Calculate min amount based on 1% slippage
-        uint256 minRequiredAmount = expectedAmount * 99 / 100;
+        uint256 minRequiredAmount = (expectedAmount * 99) / 100;
 
         // Test with amount just below the minimum (should fail)
         uint256 tooLowAmount = minRequiredAmount - 1;
@@ -552,5 +552,69 @@ contract SwapAlgebraTest is Test {
         uint256 expectedOutput = outputAmount - acceptableSlippage;
         assertEq(amountOut, expectedOutput, "Incorrect output amount");
         assertEq(outputToken.balanceOf(user), expectedOutput, "Output tokens not received by user");
+    }
+
+    function test_SwapSameToken() public {
+        uint256 swapAmount = AMOUNT;
+        uint256 gasFee = 1 ether;
+
+        // Mint tokens to SwapAlgebra for the same token case
+        inputToken.mint(address(swapAlgebra), swapAmount);
+        gasToken.mint(address(swapAlgebra), gasFee);
+
+        // Record initial balances
+        uint256 initialInputBalance = inputToken.balanceOf(user);
+        uint256 initialGasBalance = gasToken.balanceOf(user);
+
+        // Test swapping the same token (should skip main swap but handle gas fees)
+        vm.prank(user);
+        uint256 amountOut =
+            swapAlgebra.swap(address(inputToken), address(inputToken), swapAmount, address(gasToken), gasFee);
+
+        // Expected output should be the input amount minus gas fee
+        uint256 expectedOutput = swapAmount - gasFee;
+        assertEq(amountOut, expectedOutput, "Incorrect output amount for same token swap");
+
+        // Check that user received the expected amount (initial balance - input + output)
+        uint256 expectedFinalBalance = initialInputBalance - swapAmount + expectedOutput;
+        assertEq(inputToken.balanceOf(user), expectedFinalBalance, "Input tokens not returned correctly");
+
+        // Check that user received gas tokens
+        assertEq(gasToken.balanceOf(user), initialGasBalance + gasFee, "Gas tokens not received by user");
+
+        // Verify that no actual swap was performed (no pool interaction)
+        // The mock pool should not have been called since it's the same token
+    }
+
+    function test_SwapSameTokenWithGasToken() public {
+        uint256 swapAmount = AMOUNT;
+        uint256 gasFee = 1 ether;
+
+        // Mint tokens to SwapAlgebra for the same token case
+        inputToken.mint(address(swapAlgebra), swapAmount);
+
+        // Record initial balance
+        uint256 initialBalance = inputToken.balanceOf(user);
+
+        // Test swapping the same token where the input token is also the gas token
+        vm.prank(user);
+        uint256 amountOut = swapAlgebra.swap(
+            address(inputToken),
+            address(inputToken),
+            swapAmount,
+            address(inputToken), // input token is also gas token
+            gasFee
+        );
+
+        // Expected output should be the input amount minus gas fee
+        uint256 expectedOutput = swapAmount - gasFee;
+        assertEq(amountOut, expectedOutput, "Incorrect output amount for same token swap with gas token");
+
+        // Check that user's balance remains the same (they get back what they sent)
+        // The gas fee is handled internally by the SwapAlgebra contract
+        assertEq(inputToken.balanceOf(user), initialBalance, "User balance should remain unchanged");
+
+        // Verify that no actual swap was performed (no pool interaction)
+        // The mock pool should not have been called since it's the same token
     }
 }
